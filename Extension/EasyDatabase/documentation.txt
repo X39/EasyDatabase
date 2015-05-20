@@ -1,0 +1,63 @@
+VERSION
+	returns DLL version
+	@return STRING ?
+INIT
+	initializes the DLL
+	Will take care that it is only callen once
+	@return STRING "TRUE" | "FALSE"
+INITIALIZED
+	checks if DLL is initialized
+	@return STRING "TRUE" | "FALSE"
+GETLASTERROR
+	returns error of last function call (usually set when a function returns false,
+	please raise a bug if you ever find a function that does not sets the error!)
+	(or EMPTY string if error message was toolong to be transfered)
+	@return STRING ?
+OPEN
+	creates a new connection
+	if no timeout is given, you NEED TO take care that it is closed BEFORE a mission change!
+	when timeout is provided (>0), the DLL will start a new thread in background that checks
+	if the last call > timeout (checks periodicly, timeout is not precise)
+	@ARG 1 SCALAR connection timeout in seconds
+	@return STRING "TRUE" | "FALSE"
+KEEPOPEN
+	Resets optional auto-close timer of the OPEN function
+	Will return "FALSE" if connection is closed and thus can be used to check the connection state
+	@return STRING "TRUE" | "FALSE"
+CLOSE
+	closes an existing connection
+	@return STRING "TRUE" | "FALSE"
+CREATESTMT
+	Creates a new SQL statement
+	@return ARRAY ["TRUE":STRING, <STMT ID>:SCALAR] | ["FALSE", -1:STRING]
+QUERY
+	executes a query statement and prepares query receive functions (everything that returns data is a query,
+	example: SELECT, SHOW)
+	please note that you cannot do anything else with the dll before you did not queried the FULL string or cleared!
+	@ARG 1 SCALAR operating STMT ID
+	@ARG 2 STRING Query to execute
+	@return STRING "TRUE" | "FALSE"
+UPDATE
+	executes an update statement (everything that does not returns data is an update,
+	example: INSERT, UPDATE, DELETE, DROP, CREATE)
+	!IMPORTANT!
+	You need to take care that INSIDE of strings your quote char (") is escaped propper! (\")
+	The DLL wont take care that this things happen
+	Also make sure that you dont try to use datatypes that will not be the same when you would do the following in sqf:
+	compile str [<DATA>];
+	@ARG 1 SCALAR operating STMT ID
+	@ARG 2 STRING Update to execute
+	@return STRING "TRUE" | "FALSE"
+CLOSESTMT
+	Closes an existing SQL statement
+	@ARG 1 SCALAR operating STMT ID
+	@return STRING "TRUE" | "FALSE"
+NEXT
+	returns next
+	empty string is returned when there is nothing left to print out
+	@ARG 1 SCALAR operating STMT ID
+	@return STRING ? | ""
+CLEAR
+	clears current query buffer
+	@ARG 1 SCALAR operating STMT ID
+	@return STRING "TRUE"
