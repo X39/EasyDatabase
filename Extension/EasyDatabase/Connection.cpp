@@ -1,4 +1,5 @@
 #include "Connection.hpp"
+#include <Windows.h>
 #include <thread>
 
 
@@ -20,13 +21,12 @@ Connection::~Connection(void)
 	this->mutex.lock();
 	this->enableThread = false;
 	this->mutex.unlock();
-	while (this->threadRunning) _sleep(100);
+	while (this->threadRunning) Sleep(100);
 
 	this->mutex.lock();
-	for (auto it : this->sqlOperations)
-	{
-		it.second.close();
-	}
+	for (auto& it : this->sqlOperations)
+		delete it.second;
+	this->sqlOperations.clear();
 	this->mutex.unlock();
 
 	if (isConnected())
@@ -44,7 +44,7 @@ void Connection::runConnectionKillThread(unsigned long maxTimeout)
 		return;
 	this->enableThread = true;
 	resetAccessTime();
-	std::thread t = std::thread(this->thread_connectionWatch, maxTimeout);
+	std::thread t = std::thread(&Connection::thread_connectionWatch, maxTimeout, *this);
 	t.detach();
 }
 void Connection::stopConnectionKillThread(bool blockUntilStopped)
@@ -55,28 +55,28 @@ void Connection::stopConnectionKillThread(bool blockUntilStopped)
 	this->enableThread = false;
 	this->mutex.unlock();
 	if (blockUntilStopped)
-		while (this->threadRunning) _sleep(100);
+		while (this->threadRunning) Sleep(100);
 }
-void Connection::thread_connectionWatch(unsigned long maxTimeout)
+void Connection::thread_connectionWatch(unsigned long maxTimeout, Connection& object)
 {
-	this->threadRunning = true;
+	object.threadRunning = true;
 	while (true)
 	{
 		for (int i = 0; i < CONNECTIONKILL_SLEEPCOUNT; i++)
 		{
-			_sleep(CONNECTIONKILL_SLEEPTIME);
-			if (!this->enableThread)
+			Sleep(CONNECTIONKILL_SLEEPTIME);
+			if (!object.enableThread)
 				break;
 		}
-		if (!this->enableThread)
+		if (!object.enableThread)
 			break;
-		if (time(NULL) - this->lastAccess < maxTimeout)
+		if (time(NULL) - object.lastAccess < maxTimeout)
 		{
-			this->closeConnection();
+			object.closeConnection();
 			break;
 		}
 	}
-	this->threadRunning = false;
+	object.threadRunning = false;
 }
 
 bool Connection::isConnected(void)
@@ -141,10 +141,10 @@ const std::string Connection::createOperationSet(const std::string& keyword)
 		this->mutex.unlock();
 		throw std::exception("Keyword already in use");
 	}
-	SQLOPERATION op;
+	sql::Statement* stmnt;
 	try
 	{
-		op.statement = this->connection->createStatement();
+		stmnt = this->connection->createStatement();
 	}
 	catch (sql::SQLException e)
 	{
@@ -152,9 +152,11 @@ const std::string Connection::createOperationSet(const std::string& keyword)
 		throw sql::SQLException(std::string("Error while creating OperationSet: ").append(e.what()).c_str());
 	}
 	
-	op.statement->execute(std::string("use ").append(this->info.database));
-	this->sqlOperations[keyword] = op;
+	stmnt->execute(std::string("use ").append(this->info.database));
+	this->sqlOperations.insert(std::pair<std::string, SQLOPERATION*>(keyword, new SQLOPERATION(stmnt)));
+	//this->sqlOperations[keyword] = SQLOPERATION(stmnt);
 	this->mutex.unlock();
+	return keyword;
 }
 void Connection::closeOperationSet(const std::string& keyword)
 {
@@ -170,8 +172,10 @@ void Connection::closeOperationSet(const std::string& keyword)
 		this->mutex.unlock();
 		throw std::exception("Keyword is not existing");
 	}
-	this->sqlOperations[keyword].close();
+	SQLOPERATION* op = this->sqlOperations[keyword];
+	op->close();
 	this->sqlOperations.erase(keyword);
+	delete op;
 	this->mutex.unlock();
 }
 
@@ -189,14 +193,14 @@ void Connection::executeQuery(const std::string& keyword, const std::string& que
 		this->mutex.unlock();
 		throw std::exception("Keyword is not existing");
 	}
-	if (pair->second.resultSet != NULL)
+	if (pair->second->resultSet != NULL)
 	{
 		this->mutex.unlock();
 		throw std::exception("Operation still in use by a Query");
 	}
 	try
 	{
-		pair->second.resultSet = pair->second.statement->executeQuery(query);
+		pair->second->resultSet = pair->second->statement->executeQuery(query);
 	}
 	catch (sql::SQLException e)
 	{
@@ -219,7 +223,7 @@ bool Connection::execute(const std::string& keyword, const std::string& statemen
 		this->mutex.unlock();
 		throw std::exception("Keyword is not existing");
 	}
-	if (pair->second.resultSet != NULL)
+	if (pair->second->resultSet != NULL)
 	{
 		this->mutex.unlock();
 		throw std::exception("Operation still in use by a Query");
@@ -227,7 +231,7 @@ bool Connection::execute(const std::string& keyword, const std::string& statemen
 	bool result;
 	try
 	{
-		result = pair->second.statement->execute(statement);
+		result = pair->second->statement->execute(statement);
 	}
 	catch (sql::SQLException e)
 	{
@@ -251,7 +255,7 @@ int Connection::executeUpdate(const std::string& keyword, const std::string& upd
 		this->mutex.unlock();
 		throw std::exception("Keyword is not existing");
 	}
-	if (pair->second.resultSet != NULL)
+	if (pair->second->resultSet != NULL)
 	{
 		this->mutex.unlock();
 		throw std::exception("Operation still in use by a Query");
@@ -259,7 +263,7 @@ int Connection::executeUpdate(const std::string& keyword, const std::string& upd
 	int result;
 	try
 	{
-		result = pair->second.statement->executeUpdate(update);
+		result = pair->second->statement->executeUpdate(update);
 	}
 	catch (sql::SQLException e)
 	{
@@ -279,15 +283,15 @@ void Connection::query_clear(const std::string& keyword)
 		this->mutex.unlock();
 		throw std::exception("Keyword is not existing");
 	}
-	if (pair->second.resultSet == NULL)
+	if (pair->second->resultSet == NULL)
 	{
 		this->mutex.unlock();
 		return;
 	}
-	pair->second.buffer.clear();
-	pair->second.resultSet->close();
-	delete pair->second.resultSet;
-	pair->second.resultSet = NULL;
+	pair->second->buffer.clear();
+	pair->second->resultSet->close();
+	delete pair->second->resultSet;
+	pair->second->resultSet = NULL;
 	this->mutex.unlock();
 }
 void Connection::query_next(const std::string& keyword, char* output, size_t outputSize)
@@ -300,28 +304,28 @@ void Connection::query_next(const std::string& keyword, char* output, size_t out
 		throw std::exception("Keyword is not existing");
 	}
 	
-	if (pair->second.resultSet == NULL)
+	if (pair->second->resultSet == NULL)
 	{
 		this->mutex.unlock();
 		throw std::exception("No previous query existing");
 	}
-	if (pair->second.buffer.peek() == EOF)
+	if (pair->second->buffer.peek() == EOF)
 	{//Load a new row into the stringstream
-		if (pair->second.resultSet->next())
+		if (pair->second->resultSet->next())
 		{
-			pair->second.buffer.clear();
-			pair->second.buffer << '[';
+			pair->second->buffer.clear();
+			pair->second->buffer << '[';
 			int cellIndex = 1;
 			try
 			{
-				auto columnCount = pair->second.resultSet->getMetaData()->getColumnCount();
+				auto columnCount = pair->second->resultSet->getMetaData()->getColumnCount();
 				for (unsigned int i = 1; i <= columnCount; i++)
 				{
-					std::string res = pair->second.resultSet->getString(cellIndex);
+					std::string res = pair->second->resultSet->getString(cellIndex);
 					if (cellIndex > 1)
-						pair->second.buffer << ",\"" << res << '"';
+						pair->second->buffer << ",\"" << res << '"';
 					else
-						pair->second.buffer << '"' << res << '"';
+						pair->second->buffer << '"' << res << '"';
 					cellIndex++;
 				}
 			}
@@ -330,20 +334,20 @@ void Connection::query_next(const std::string& keyword, char* output, size_t out
 				this->mutex.unlock();
 				throw std::exception(std::string("Error while reading new row from ResultSet: ").append(e.what()).c_str());
 			}
-			pair->second.buffer << ']';
+			pair->second->buffer << ']';
 		}
 		else
 		{
-			pair->second.resultSet->close();
-			delete pair->second.resultSet;
-			pair->second.resultSet = NULL;
+			pair->second->resultSet->close();
+			delete pair->second->resultSet;
+			pair->second->resultSet = NULL;
 			this->mutex.unlock();
 			return;
 		}
 	}
 	std::string result;
-	pair->second.buffer.readsome(output, outputSize - 1);
-	output[pair->second.buffer.gcount()] = '\0';
+	pair->second->buffer.readsome(output, outputSize - 1);
+	output[pair->second->buffer.gcount()] = '\0';
 }
 static unsigned int keywordCount = 0;
 inline std::string Connection::getPseudoUniqueKeyword()

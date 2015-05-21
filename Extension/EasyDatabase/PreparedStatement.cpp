@@ -47,7 +47,7 @@ std::string PreparedStatement::getStatementString(const char** argumentArray, un
 		ARGUMENT* tmpArgument = getArgumentByName(argumentArray[i]);
 		if (tmpArgument == nullptr)
 			throw std::exception(std::string("Cannot find argument '").append(argumentArray[i]).append("' for PreparedStatement '").append(this->_name).append("'").c_str());
-		struct ARG arg = { arg.argumentReference = *tmpArgument, arg.replacement = argumentArray[i + 1] };
+		struct ARG arg = { *tmpArgument, argumentArray[i + 1] };
 		args.push_back(arg);
 	}
 	int lastFindResult = 0;

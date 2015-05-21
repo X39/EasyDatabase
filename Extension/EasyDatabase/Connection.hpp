@@ -19,8 +19,10 @@ private:
 	{
 		sql::Statement*			statement;
 		sql::ResultSet*			resultSet;
-		std::stringstream		buffer;
-		structSqlOperation() { this->resultSet = NULL; this->statement = NULL; }
+		std::stringstream&		buffer;
+		structSqlOperation(sql::Statement* Statement = NULL) : statement(Statement), buffer(std::stringstream()) { this->resultSet = NULL; }
+		structSqlOperation(structSqlOperation& that) = delete;
+		~structSqlOperation(void) { this->close(); }
 		void close(void)
 		{
 			this->buffer.clear();
@@ -50,7 +52,7 @@ private:
 	DATABASEINFO info;
 	sql::Connection* connection;
 	sql::Driver* driver;
-	std::map<std::string, SQLOPERATION&> sqlOperations;
+	std::map<std::string, SQLOPERATION*> sqlOperations;
 	time_t lastAccess;
 	std::mutex mutex;
 
@@ -61,6 +63,10 @@ private:
 
 public:
 	Connection(std::string name, std::string serverUri, std::string database, std::string username, std::string password = "");
+	Connection(const Connection& that)
+	{
+		throw std::exception("copy not allowed");
+	}
 	~Connection(void);
 
 	/*
@@ -162,7 +168,7 @@ private:
 	/*
 	 Thread function, not supposed to be callen programmaticly
 	*/
-	void thread_connectionWatch(unsigned long maxTimeout);
+	static void thread_connectionWatch(unsigned long maxTimeout, Connection& object);
 	/*
 	 Returns PseudoUnique keywords for OperationSets
 	 If a keyword is existing with following regex: CONOPKEYWORD[0-9]*
