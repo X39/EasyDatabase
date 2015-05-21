@@ -7,10 +7,14 @@
 #include <string>
 #include <ctime>
 #include <Windows.h>
+#include "sqf/Array.h"
 using namespace std;
 
 int main(int argc, char* args[])
 {
+	sqf::Array arr;
+	sqf::Array::parsePartially(&arr, "[\"test\"\"\", [1.2, .2, 1], false]");
+	/*
 	time_t t = time(NULL);
 	char output[8192];
 	cout << "====INITIALIZE DLL====" << endl;
@@ -87,5 +91,6 @@ int main(int argc, char* args[])
 	RVExtension(output, 8192, "[\"NEXT\",\"1\"]"); cout << output << endl;
 
 	system("pause");
+	*/
 }
 #endif
