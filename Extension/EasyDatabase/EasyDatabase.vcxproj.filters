@@ -19,6 +19,9 @@
     <Filter Include="Source Files\dotX39">
       <UniqueIdentifier>{490e3ee6-3142-413a-9017-2046d7a48cec}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\sqfParser">
+      <UniqueIdentifier>{aabd49d6-666b-4c5d-9ae8-25e86a7b352f}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="dllMain.h">
@@ -59,6 +62,21 @@
     </ClInclude>
     <ClInclude Include="PreparedStatement.hpp">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="sqf\Array.h">
+      <Filter>Header Files\sqfParser</Filter>
+    </ClInclude>
+    <ClInclude Include="sqf\Base.h">
+      <Filter>Header Files\sqfParser</Filter>
+    </ClInclude>
+    <ClInclude Include="sqf\Boolean.h">
+      <Filter>Header Files\sqfParser</Filter>
+    </ClInclude>
+    <ClInclude Include="sqf\Scalar.h">
+      <Filter>Header Files\sqfParser</Filter>
+    </ClInclude>
+    <ClInclude Include="sqf\String.h">
+      <Filter>Header Files\sqfParser</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

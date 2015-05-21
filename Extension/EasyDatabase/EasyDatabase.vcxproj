@@ -92,6 +92,11 @@
     <ClInclude Include="dotX39\Node.h" />
     <ClInclude Include="dotX39\visualStudioDefines.h" />
     <ClInclude Include="PreparedStatement.hpp" />
+    <ClInclude Include="sqf\Array.h" />
+    <ClInclude Include="sqf\Base.h" />
+    <ClInclude Include="sqf\Boolean.h" />
+    <ClInclude Include="sqf\Scalar.h" />
+    <ClInclude Include="sqf\String.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="documentation.txt" />
