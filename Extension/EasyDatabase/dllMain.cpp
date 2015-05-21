@@ -31,208 +31,36 @@ using namespace std;
 #define CONNECTION_CHECK_TIMEOUT 30000
 #endif
 
-typedef struct structSqlContainer
-{
-	sql::Statement*			statement;
-	sql::ResultSet*			resultSet;
-	std::stringstream		buffer;
-	structSqlContainer() : statement(NULL), resultSet(NULL), buffer(std::stringstream("")) {}
-	~structSqlContainer()
-	{
-		if (resultSet != NULL)
-		{
-			if (!resultSet->isClosed())
-				resultSet->close();
-			delete resultSet;
-		}
-		if (statement != NULL)
-		{
-			statement->close();
-			delete statement;
-		}
-	}
-}SQLCONTAINER;
-typedef struct structArgument
-{
-	std::string name;
-	std::string token;
-	bool isEscaped;
-	structArgument(std::string Name, std::string Token, bool IsEscaped = false) : name(Name), token(Token), isEscaped(IsEscaped) {};
-} ARGUMENT;
-typedef struct structConnection
-{
-	std::string name;
-	std::string username;
-	std::string password;
-	std::string serverUri;
-	std::string database;
-
-	sql::Connection* databaseConnection;
-	std::vector<SQLCONTAINER*> sqlOperations;
-	time_t lastAccess;
-	std::mutex mutex;
-
-	structConnection() : databaseConnection(NULL) {};
-	~structConnection()
-	{
-		for (auto& sqlOperation : sqlOperations)
-			if (sqlOperation != NULL)
-				delete sqlOperation;
-		if (databaseConnection != NULL)
-		{
-			if (!databaseConnection->isClosed())
-				databaseConnection->close();
-			delete databaseConnection;
-		}
-	}
-	bool isValid(std::string* outString)
-	{
-		bool flag = false;
-		outString->append("[");
-		if (name.empty())
-		{
-			if (flag)
-				outString->append(",");
-			outString->append("name");
-			flag = true;
-		}
-		if (username.empty())
-		{
-			if (flag)
-				outString->append(",");
-			outString->append("username");
-			flag = true;
-		}
-		if (password.empty())
-		{
-			if (flag)
-				outString->append(",");
-			outString->append("password");
-			flag = true;
-		}
-		if (serverUri.empty())
-		{
-			if (flag)
-				outString->append(",");
-			outString->append("serverUri");
-			flag = true;
-		}
-		if (database.empty())
-		{
-			if (flag)
-				outString->append(",");
-			outString->append("database");
-			flag = true;
-		}
-		outString->append("]");
-		return !flag;
-	}
-} CONNECTION;
-typedef struct structPreparedStatement
-{
-	std::string name;
-	std::string statement;
-	std::vector<ARGUMENT> arguments;
-	bool isValid(std::string* outString)
-	{
-		bool flag = false;
-		outString->append("[");
-		if (name.empty())
-		{
-			if (flag)
-				outString->append(",");
-			outString->append("name");
-			flag = true;
-		}
-		if (statement.empty())
-		{
-			if (flag)
-				outString->append(",");
-			outString->append("statement");
-			flag = true;
-		}
-		outString->append("]");
-		return !flag;
-	}
-	ARGUMENT* getArgumentByName(const char* name)
-	{
-		for (int i = 0; i < arguments.size(); i++)
-		{
-			if (arguments[i].name.compare(name) == 0)
-				return &arguments[i];
-		}
-		return nullptr;
-	}
-	//@param arguments: array structure should be [<argumentName1>, <argument1>, <argumentName2>, <argument2>, <argumentNameN>, <argumentN>]
-	bool replaceArguments(const char** argumentArray, unsigned int argumentCount, std::string& outString)
-	{
-		//Simple Structure that contains informations about the Argument to replace and the text to replace the arguments token with
-		struct ARG
-		{
-			ARGUMENT& argumentReference;
-			const char* replacement;
-		};
-		if (argumentCount % 2 != 0) { setLastError(std::string(to_string(argumentCount)).append(" is no valid argument count (count % 2 == 0)")); return false; }
-		if (argumentCount / 2 != this->arguments.size()) { setLastError(std::string("PreparedStatements '").append(this->name).append("' ArgumentCount is ").append(to_string(this->arguments.size())).append(" but got ").append(to_string(argumentCount / 2)).append(" arguments for replacement")); return false; }
-		std::vector<struct ARG> args;
-		for (int i = 0; i < argumentCount; i += 2)
-		{
-			ARGUMENT* tmpArgument = getArgumentByName(argumentArray[i]);
-			if (tmpArgument == nullptr)
-			{
-				setLastError(std::string("Cannot find argument '").append(argumentArray[i]).append("' for PreparedStatement '").append(this->name).append("'"));
-				return false;
-			}
-			struct ARG arg = { arg.argumentReference = *tmpArgument, arg.replacement = argumentArray[i + 1] };
-			args.push_back(arg);
-		}
-		int lastFindResult = 0;
-		for (auto& arg : args)
-		{
-			int findResult = this->statement.find(arg.argumentReference.token, lastFindResult);
-			if (findResult == -1)
-			{
-				setLastError(std::string("Cannot find argument token '").append(arg.argumentReference.token).append("' inside of PreparedStatement '").append(this->name).append("'"));
-				return false;
-			}
-			outString.append(this->statement.substr(lastFindResult, findResult));
-			outString.append(arg.replacement);
-			lastFindResult = findResult;
-		}
-		outString.append(this->statement.substr(lastFindResult));
-	}
-} PREPAREDSTATEMENT;
-
-static struct config {
-	std::vector<CONNECTION> connections;
-	std::vector<PREPAREDSTATEMENT> preparedStatements;
-	int getUniqueIdOfConnection(const char* name)
-	{
-		int uniqueId = -1;
-		for (int i = 0; i < connections.size(); i++)
-		{
-			if (connections[i].name.compare(name) == 0)
-			{
-				uniqueId = i;
-				break;
-			}
-		}
-		return uniqueId;
-	}
-	int getUniqueIdOfPreparedStatements(const char* name)
-	{
-		int uniqueId = -1;
-		for (int i = 0; i < preparedStatements.size(); i++)
-		{
-			if (preparedStatements[i].name.compare(name) == 0)
-			{
-				uniqueId = i;
-				break;
-			}
-		}
-		return uniqueId;
-	}
-} g_config;
+//static struct config {
+//	std::vector<CONNECTION> connections;
+//	std::vector<PREPAREDSTATEMENT> preparedStatements;
+//	int getUniqueIdOfConnection(const char* name)
+//	{
+//		int uniqueId = -1;
+//		for (int i = 0; i < connections.size(); i++)
+//		{
+//			if (connections[i].name.compare(name) == 0)
+//			{
+//				uniqueId = i;
+//				break;
+//			}
+//		}
+//		return uniqueId;
+//	}
+//	int getUniqueIdOfPreparedStatements(const char* name)
+//	{
+//		int uniqueId = -1;
+//		for (int i = 0; i < preparedStatements.size(); i++)
+//		{
+//			if (preparedStatements[i].name.compare(name) == 0)
+//			{
+//				uniqueId = i;
+//				break;
+//			}
+//		}
+//		return uniqueId;
+//	}
+//} g_config;
 static bool								g_initialized = false;
 static std::string						g_lastError;
 static sql::Driver*						g_dbDriver = NULL;
@@ -285,12 +113,14 @@ inline void setLastError(const char* str)
 
 void clearConfig(void)
 {
+	/*
 	g_config.connections.clear();
 	g_config.preparedStatements.clear();
+	*/
 }
 bool readConfig(void)
 {
-	clearConfig();
+/*	clearConfig();
 	dotX39::Node* root = new dotX39::Node("root");
 	try 
 	{
@@ -462,22 +292,12 @@ bool readConfig(void)
 		}
 	}
 	delete root;
+	*/
 	return true;
-}
-inline void updateLastConnectionAccess(CONNECTION& con)
-{
-	con.lastAccess = time(NULL);
-}
-void thread_connectionWatch(unsigned long timeout, unsigned int conIndex)
-{
-	while (g_config.connections.size() > conIndex && time(NULL) - g_config.connections[conIndex].lastAccess < timeout)
-		Sleep(CONNECTION_CHECK_TIMEOUT);
-	g_config.connections[conIndex].mutex.lock();
-	closeConnection();
-	g_config.connections[conIndex].mutex.unlock();
 }
 void __stdcall RVExtension(char *output, int outputSize, const char *function)
 {
+	/*
 	g_connectionWatchMutex.lock();
 	//Split function parameter into propper function parameters and
 	//do error checking for function parameter
@@ -860,6 +680,7 @@ void __stdcall RVExtension(char *output, int outputSize, const char *function)
 functionEnd:
 	g_connectionWatchMutex.unlock();
 	return;
+	*/
 }
 
 #ifndef _DEBUG
