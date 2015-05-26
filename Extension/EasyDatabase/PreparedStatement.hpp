@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <vector>
+#include "sqf\Array.h"
 class PreparedStatement
 {
 public:
@@ -45,5 +46,6 @@ public:
 	 @Throws				std::exception if it hits something that is not as expected
 	*/
 	std::string getStatementString(const char** argumentArray, unsigned int argumentCount);
+	std::string getStatementString(sqf::Array& arguments);
 };
 
