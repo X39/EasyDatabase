@@ -3,6 +3,7 @@
 #include "Scalar.h"
 #include "Boolean.h"
 #include "String.h"
+#include "Nil.h"
 #include <vector>
 namespace sqf
 {
@@ -87,21 +88,27 @@ namespace sqf
 						out->_arrayList.push_back(obj);
 					}
 					break;
-				case 't': case 'f': //Most likely a boolean here
+				case 't': case 'f': case 'T': case 'F': //Most likely a boolean here
+				{
+					Boolean* obj = new Boolean();
+					try
 					{
-						Boolean* obj = new Boolean();
-						try
-						{
-							i += Boolean::parsePartially(obj, in.substr(i));
-						}
-						catch (std::exception e)
-						{
-							delete obj;
-							throw e;
-						}
-						out->_arrayList.push_back(obj);
+						i += Boolean::parsePartially(obj, in.substr(i));
 					}
-					break;
+					catch (std::exception e)
+					{
+						delete obj;
+						throw e;
+					}
+					out->_arrayList.push_back(obj);
+				}
+				break;
+				case 'n': case 'N': //Most likely a nil value here
+				{
+					out->_arrayList.push_back(new Nil());
+					i += 2;
+				}
+				break;
 				case '"': //We discovered a string
 					{
 						String* obj = new String();
