@@ -36,3 +36,36 @@ Functions:
 		@Return		NIL
 		@CanFail	Function will fail when given Connection is not existing or an error occurs when the connection gets closed
 		@Example	["CLOSECONNECTION", [1]]
+	CREATEOPERATIONSET
+		Creates a new OperationSet where SQL commands can be operated on
+		@Param1		SCALAR		UniqueID of Connection
+		@Param2		STRING		Unique keyword of this operation set (unique per connection)
+		@Return		NIL
+		@CanFail	Function will fail when given Connection is not existing or an error occurs when the set gets created
+		@Example	["CREATEOPERATIONSET", [1, "foobarKeyword"]]
+	CLOSEOPERATIONSET
+		Closes an existing OperationSet
+		@Param1		SCALAR		UniqueID of Connection
+		@Param2		STRING		Unique keyword of the operation set
+		@Return		NIL
+		@CanFail	Function will fail when given Connection is not existing, keyword is not existing or an error occurs when the set gets created
+		@Example	["CLOSEOPERATIONSET", [1, "foobarKeyword"]]
+	EXECUTE
+		Performs an operation on given OperationSet
+		@Param1		SCALAR		UniqueID of Connection
+		@Param2		STRING		Unique keyword of the operation set
+		@Param3		STRING		Query to execute
+		@Return		BOOL		TRUE if query was successfully, FALSE if it was not.
+		@CanFail	Function will fail when given Connection is not existing, keyword is not existing or an error occurs when the set gets created
+		@Example	["EXECUTE", [1, "foobarKeyword", "SELECT * FROM table"]]
+	EXECUTESTATEMENT
+		Performs an operation on given OperationSet with given Statement. Statement Arguments have to be provided like this:
+		[<argumentName1>, <argument1>, <argumentName2>, <argument2>, <argumentNameN>, <argumentN>]
+		Please note that ONLY STRINGS are allowed for arguments
+		@Param1		SCALAR		UniqueID of Connection
+		@Param2		STRING		Unique keyword of the operation set
+		@Param3		SCALAR		UniqueID of the PreparedStatement
+		@Param4		ARRAY		Argument Array
+		@Return		BOOL		TRUE if query was successfully, FALSE if it was not.
+		@CanFail	Function will fail when given Connection is not existing, keyword is not existing, arguments provided are invalid or an error occurs when the set gets created
+		@Example	["EXECUTE", [1, "foobarKeyword", "SELECT * FROM table"]]

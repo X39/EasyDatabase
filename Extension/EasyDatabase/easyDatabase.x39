@@ -2,6 +2,7 @@ settings
 {
 	doToUpperForCommands = true;
 	doCheckParams = true;
+	allowNonPreparedSql = true;
 }
 connections
 {

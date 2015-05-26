@@ -29,10 +29,12 @@ static struct structConfig {
 	std::vector<PreparedStatement*> preparedStatements;
 	bool doToUpperForCommands;
 	bool doCheckParams;
+	bool allowNonPreparedSql;
 	structConfig()
 	{
 		doToUpperForCommands = true;
 		doCheckParams = true;
+		allowNonPreparedSql = true;
 	}
 	~structConfig()
 	{
@@ -74,7 +76,7 @@ static struct structConfig {
 		this->preparedStatements.clear();
 	}
 } g_config;
-static std::vector<sqf::Command>		g_commands;
+static std::vector<sqf::Command>	g_commands;
 
 void toUpper(std::string& s)
 {
@@ -157,7 +159,7 @@ void addCommands(void)
 				return std::string("[TRUE,\"\",NIL]");
 			},
 			"[1, 0]",
-			"Opens given connection and starts the connection tracker (if Param2 is > 0) Returns a NIL value."
+			"Opens given connection and starts the connection tracker (if Param2 is > 0). Returns a NIL value."
 		)
 	);
 	g_commands.push_back(
@@ -175,7 +177,84 @@ void addCommands(void)
 				return std::string("[TRUE,\"\",NIL]");
 			},
 			"[1]",
-			"Searches for the Connection and returns its UniqueID. Returns a SCALAR."
+			"Searches for the Connection and returns its UniqueID. Returns a NIL value."
+		)
+	);
+	g_commands.push_back(
+		sqf::Command(
+			"CREATEOPERATIONSET",
+			[](sqf::Array* arr)
+			{
+				auto uniqueID = ((sqf::Scalar*) (*arr)[0])->getValue();
+				if (uniqueID < 0 || uniqueID >= g_config.connections.size())
+				{
+					throw std::exception(std::string("Connection '").append(to_string(uniqueID)).append("' is not existing").c_str());
+				}
+				auto con = g_config.connections[uniqueID];
+				con->createOperationSet(((sqf::String*) (*arr)[1])->getValue());
+				return std::string("[TRUE,\"\",NIL]");
+			},
+			"[1, \"foobarKeyword\"]",
+			"Creates a new OperationSet where SQL commands can be operated on. Returns a NIL value."
+		)
+	);
+	g_commands.push_back(
+		sqf::Command(
+			"CLOSEOPERATIONSET",
+			[](sqf::Array* arr)
+			{
+				auto uniqueID = ((sqf::Scalar*) (*arr)[0])->getValue();
+				if (uniqueID < 0 || uniqueID >= g_config.connections.size())
+				{
+					throw std::exception(std::string("Connection '").append(to_string(uniqueID)).append("' is not existing").c_str());
+				}
+				auto con = g_config.connections[uniqueID];
+				con->closeOperationSet(((sqf::String*) (*arr)[1])->getValue());
+				return std::string("[TRUE,\"\",NIL]");
+			},
+			"[1, \"foobarKeyword\"]",
+			"Closes an existing OperationSet. Returns a NIL value."
+		)
+	);
+	if (g_config.allowNonPreparedSql) g_commands.push_back(
+		sqf::Command(
+			"EXECUTE",
+			[](sqf::Array* arr)
+			{
+				auto uniqueID = ((sqf::Scalar*) (*arr)[0])->getValue();
+				if (uniqueID < 0 || uniqueID >= g_config.connections.size())
+				{
+					throw std::exception(std::string("Connection '").append(to_string(uniqueID)).append("' is not existing").c_str());
+				}
+				auto con = g_config.connections[uniqueID];
+				
+				con->execute(((sqf::String*) (*arr)[1])->getValue(), "");
+				return std::string("[TRUE,\"\",NIL]");
+			},
+			"[1, \"foobarKeyword\", \"SELECT * FROM table\"]",
+			"Performs an operation on given OperationSet. Returns a BOOL containing if the operation was successfully executed."
+		)
+	);
+	g_commands.push_back(
+		sqf::Command(
+			"EXECUTESTATEMENT",
+			[](sqf::Array* arr)
+			{
+				auto uniqueIDConnection = ((sqf::Scalar*) (*arr)[0])->getValue();
+				auto uniqueIDPreparedStatement = ((sqf::Scalar*) (*arr)[2])->getValue();
+				if (uniqueIDConnection < 0 || uniqueIDConnection >= g_config.connections.size())
+					throw std::exception(std::string("Connection '").append(to_string(uniqueIDConnection)).append("' is not existing").c_str());
+				if (uniqueIDPreparedStatement < 0 || uniqueIDPreparedStatement >= g_config.connections.size())
+					throw std::exception(std::string("PreparedStatement '").append(to_string(uniqueIDPreparedStatement)).append("' is not existing").c_str());
+
+				auto con = g_config.connections[uniqueIDConnection];
+				auto stmnt = g_config.preparedStatements[uniqueIDPreparedStatement];
+				con->execute(((sqf::String*) (*arr)[1])->getValue(), stmnt->getStatementString(*((sqf::Array*) (*arr)[3])));
+				return std::string("[TRUE,\"\",NIL]");
+			},
+			"[1, \"foobarKeyword\", 2, [<argumentName1>, <argument1>, <argumentName2>, <argument2>, <argumentNameN>, <argumentN>]]",
+			"Performs an operation on given OperationSet with given Statement.Statement Arguments have to be provided like this: [<argumentName1>, <argument1>, <argumentName2>, <argument2>, <argumentNameN>, <argumentN>]. Please note that ONLY STRINGS are allowed for arguments.",
+			false
 		)
 	);
 }
@@ -219,6 +298,15 @@ std::string readConfig(void)
 						return std::string("Error while reading config file: Settings '").append(dataName).append("' has invalid datatype, expected BOOLEAN");
 					}
 					g_config.doCheckParams = ((dotX39::DataBoolean*)data)->getDataAsBoolean();
+				}
+				if (dataName.compare("allowNonPreparedSql") == 0)
+				{
+					if (dataType != dotX39::DataTypes::BOOLEAN)
+					{
+						delete root;
+						return std::string("Error while reading config file: Settings '").append(dataName).append("' has invalid datatype, expected BOOLEAN");
+					}
+					g_config.allowNonPreparedSql = ((dotX39::DataBoolean*)data)->getDataAsBoolean();
 				}
 			}
 		}
@@ -378,6 +466,7 @@ std::string readConfig(void)
 //Return array always: [<Success:BOOL>, <Error:STRING>, <FunctionResult:UNKNOWN>]
 void __stdcall RVExtension(char *output, int outputSize, const char *function)
 {
+	//Check if config was read yet and load it
 	if (g_commands.empty())
 	{
 		std::string& result = readConfig();
@@ -386,7 +475,6 @@ void __stdcall RVExtension(char *output, int outputSize, const char *function)
 			strncpy(output, std::string("[FALSE,\"").append(result).append("\",NIL]").c_str(), outputSize);
 			return;
 		}
-		addCommands();
 	}
 	//Do basic function parsing
 	sqf::Array arr;
@@ -421,7 +509,7 @@ void __stdcall RVExtension(char *output, int outputSize, const char *function)
 		strncpy(output, std::string("[FALSE,\"").append("Second function parameter was NOT of the type array!").append("\",NIL]").c_str(), outputSize);
 		return;
 	}
-
+	//Instruction Handling
 	sqf::Array& arg = *(sqf::Array*)arr[1];
 	std::string fnc = ((sqf::String&)tmpFnc).getValue();
 	if (g_config.doToUpperForCommands)
@@ -430,12 +518,12 @@ void __stdcall RVExtension(char *output, int outputSize, const char *function)
 	std::string cmdOut;
 	try
 	{
-	for (auto& it : g_commands)
-		if (flag = it.runIfMatch(fnc, cmdOut, &arg, g_config.doCheckParams))
-		{
-			strncpy(output, cmdOut.c_str(), outputSize);
-			break;
-		}
+		for (auto& it : g_commands)
+			if (flag = it.runIfMatch(fnc, cmdOut, &arg, g_config.doCheckParams))
+			{
+				strncpy(output, cmdOut.c_str(), outputSize);
+				break;
+			}
 	}
 	catch (std::exception e)
 	{
@@ -447,6 +535,7 @@ void __stdcall RVExtension(char *output, int outputSize, const char *function)
 		strncpy(output, std::string("[FALSE,\"").append("Function '").append(fnc).append("' is unknown. Hint: Function names are case-sensitive!\",NIL]").c_str(), outputSize);
 		return;
 	}
+}
 
 #ifndef _DEBUG
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReserved)
@@ -454,12 +543,11 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReser
 	switch (ul_reason_for_call)
 	{
 	case DLL_PROCESS_ATTACH:
+		addCommands();
 	case DLL_THREAD_ATTACH:
 	case DLL_THREAD_DETACH:
 	case DLL_PROCESS_DETACH:
-		g_connectionWatchMutex.lock();
-		closeConnection();
-		g_connectionWatchMutex.unlock();
+		g_commands.clear();
 		break;
 	}
 	return TRUE;
