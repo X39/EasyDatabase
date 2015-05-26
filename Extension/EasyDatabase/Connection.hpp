@@ -69,6 +69,8 @@ public:
 	}
 	~Connection(void);
 
+
+	std::string getName(void);
 	/*
 	 Resets the last access for the ConnectionKill thread
 	*/

@@ -32,6 +32,10 @@ Connection::~Connection(void)
 	if (isConnected())
 		this->closeConnection();
 }
+inline std::string Connection::getName(void)
+{
+	return this->info.name;
+}
 void Connection::resetAccessTime(void)
 {
 	this->mutex.lock();

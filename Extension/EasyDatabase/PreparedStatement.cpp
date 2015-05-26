@@ -12,6 +12,10 @@ PreparedStatement::~PreparedStatement()
 {
 }
 
+inline std::string PreparedStatement::getName(void)
+{
+	return this->_name;
+}
 void PreparedStatement::addArgument(ARGUMENT& arg)
 {
 	this->_arguments.push_back(arg);

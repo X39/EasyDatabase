@@ -24,6 +24,8 @@ public:
 
 	~PreparedStatement();
 
+	std::string getName(void);
+
 	/*
 	 Adds an Argument to the list of arguments of this PreparedStatement
 	 
