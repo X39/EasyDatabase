@@ -7,7 +7,7 @@ namespace sqf
 	class Command
 	{
 	private:
-		std::function<void(sqf::Array*)> _fnc;
+		std::function<std::string(sqf::Array*)> _fnc;
 		sqf::Array* _parameters;
 		std::string _help;
 		std::string _name;
@@ -18,7 +18,7 @@ namespace sqf
 			LengthDiffers = 1,
 			TypeDiffers
 		};
-		Command(std::string name, std::function<void(sqf::Array*)> fnc, std::string example = "", std::string help = "") : _fnc(fnc), _help(help), _name(name)
+		Command(std::string name, std::function<std::string(sqf::Array*)> fnc, std::string example = "", std::string help = "") : _fnc(fnc), _help(help), _name(name)
 		{
 			_parameters = new sqf::Array;
 			try
@@ -57,19 +57,20 @@ namespace sqf
 		}
 		std::string getHelp(void)
 		{
-			return std::string(this->_help).append(" Example: ").append(this->_parameters->escapedString());
+			return std::string(this->_name).append(": ").append(this->_help).append(" Example: ").append(this->_parameters->escapedString());
 		}
-		void runCommand(sqf::Array* params, bool checkParams = true)
+		std::string runCommand(sqf::Array* params, bool checkParams = true)
 		{
 			if (checkParams && compareParameters(params))
 				throw std::exception("Parameters dont match");
-			this->_fnc(params);
+			auto result = this->_fnc(params);
+			return result;
 		}
-		inline bool runIfMatch(const std::string& name, sqf::Array* params, bool checkParams = true)
+		inline bool runIfMatch(const std::string& name, std::string& out, sqf::Array* params, bool checkParams = true)
 		{
 			if (name.compare(this->_name) == 0)
 			{
-				runCommand(params, checkParams);
+				out = runCommand(params, checkParams);
 				return true;
 			}
 			return false;
