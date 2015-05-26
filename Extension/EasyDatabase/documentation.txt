@@ -68,4 +68,62 @@ Functions:
 		@Param4		ARRAY		Argument Array
 		@Return		BOOL		TRUE if query was successfully, FALSE if it was not.
 		@CanFail	Function will fail when given Connection is not existing, keyword is not existing, arguments provided are invalid or an error occurs when the set gets created
+		@Example	["EXECUTE", [1, "foobarKeyword", ["arg1", "foobar"]]]
+	EXECUTEQUERY
+		Performs an operation on given OperationSet
+		OperationSet will be blocked until the query was either cleared or fully received!
+		@Param1		SCALAR		UniqueID of Connection
+		@Param2		STRING		Unique keyword of the operation set
+		@Param3		STRING		Query to execute
+		@Return		NIL
+		@CanFail	Function will fail when given Connection is not existing, keyword is not existing or an error occurs when the set gets created
 		@Example	["EXECUTE", [1, "foobarKeyword", "SELECT * FROM table"]]
+	EXECUTEQUERYSTATEMENT
+		Performs an operation on given OperationSet with given Statement. Statement Arguments have to be provided like this:
+		[<argumentName1>, <argument1>, <argumentName2>, <argument2>, <argumentNameN>, <argumentN>]
+		Please note that ONLY STRINGS are allowed for arguments
+		OperationSet will be blocked until the query was either cleared or fully received!
+		@Param1		SCALAR		UniqueID of Connection
+		@Param2		STRING		Unique keyword of the operation set
+		@Param3		SCALAR		UniqueID of the PreparedStatement
+		@Param4		ARRAY		Argument Array
+		@Return		NIL
+		@CanFail	Function will fail when given Connection is not existing, keyword is not existing, arguments provided are invalid or an error occurs when the set gets created
+		@Example	["EXECUTE", [1, "foobarKeyword", ["arg1", "foobar"]]]
+	EXECUTEUPDATE
+		Performs an operation on given OperationSet
+		OperationSet will be blocked until the query was either cleared or fully received!
+		@Param1		SCALAR		UniqueID of Connection
+		@Param2		STRING		Unique keyword of the operation set
+		@Param3		STRING		Query to execute
+		@Return		SCALAR		Returns the affected row count from last Update call
+		@CanFail	Function will fail when given Connection is not existing, keyword is not existing or an error occurs when the set gets created
+		@Example	["EXECUTEUPDATE", [1, "foobarKeyword", "SELECT * FROM table"]]
+	EXECUTEUPDATESTATEMENT
+		Performs an operation on given OperationSet with given Statement. Statement Arguments have to be provided like this:
+		[<argumentName1>, <argument1>, <argumentName2>, <argument2>, <argumentNameN>, <argumentN>]
+		Please note that ONLY STRINGS are allowed for arguments
+		OperationSet will be blocked until the query was either cleared or fully received!
+		@Param1		SCALAR		UniqueID of Connection
+		@Param2		STRING		Unique keyword of the operation set
+		@Param3		SCALAR		UniqueID of the PreparedStatement
+		@Param4		ARRAY		Argument Array
+		@Return		SCALAR		Returns the affected row count from last Update call
+		@CanFail	Function will fail when given Connection is not existing, keyword is not existing, arguments provided are invalid or an error occurs when the set gets created
+		@Example	["EXECUTEUPDATESTATEMENT", [1, "foobarKeyword", ["arg1", "foobar"]]]
+	NEXT
+		Receives next results from query command
+		OperationSets are blocked until the query was either cleared or fully received!
+		@Param1		SCALAR		UniqueID of Connection
+		@Param2		STRING		Unique keyword of the operation set
+		@Return		STRING		Part of the result comming from the query
+		@CanFail	Function will fail when given Connection is not existing, keyword is not existing or an error occurs during operation
+		@Example	["NEXT", [1, "foobarKeyword"]]
+	CLEAR
+		Receives next results from query command
+		OperationSets are blocked until the query was either cleared or fully received!
+		@Param1		SCALAR		UniqueID of Connection
+		@Param2		STRING		Unique keyword of the operation set
+		@Return		NIL
+		@CanFail	Function will fail when given Connection is not existing, keyword is not existing or an error occurs during operation
+		@Example	["NEXT", [1, "foobarKeyword"]]

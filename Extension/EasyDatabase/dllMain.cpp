@@ -77,6 +77,7 @@ static struct structConfig {
 	}
 } g_config;
 static std::vector<sqf::Command>	g_commands;
+static int g_outputSize;
 
 void toUpper(std::string& s)
 {
@@ -93,7 +94,7 @@ void addCommands(void)
 	g_commands.push_back(
 		sqf::Command(
 			"ABOUT",
-			[](sqf::Array* arr)
+			[](sqf::Array* arr, char* output, int outputSize)
 			{
 				return std::string("[TRUE,\"\",\"").append("EasyDatabase is an extension for ArmA 3 developed and maintained by X39.").append("\"]");
 			},
@@ -104,7 +105,7 @@ void addCommands(void)
 	g_commands.push_back(
 		sqf::Command(
 			"VERSION",
-			[](sqf::Array* arr)
+			[](sqf::Array* arr, char* output, int outputSize)
 			{
 				return std::string("[TRUE,\"\",\"").append(_VERSION_).append("\"]");
 			},
@@ -115,7 +116,7 @@ void addCommands(void)
 	g_commands.push_back(
 		sqf::Command(
 			"GETPREPAREDSTATEMENT",
-			[](sqf::Array* arr)
+			[](sqf::Array* arr, char* output, int outputSize)
 			{
 				auto uniqueID = g_config.getUniqueIdOfPreparedStatements(((sqf::String*) (*arr)[0])->getValue().c_str());
 				if (uniqueID < 0)
@@ -131,7 +132,7 @@ void addCommands(void)
 	g_commands.push_back(
 		sqf::Command(
 			"GETCONNECTION",
-			[](sqf::Array* arr)
+			[](sqf::Array* arr, char* output, int outputSize)
 			{
 				auto uniqueID = g_config.getUniqueIdOfConnection(((sqf::String*) (*arr)[0])->getValue().c_str());
 				if (uniqueID < 0)
@@ -147,7 +148,7 @@ void addCommands(void)
 	g_commands.push_back(
 		sqf::Command(
 			"OPENCONNECTION",
-			[](sqf::Array* arr)
+			[](sqf::Array* arr, char* output, int outputSize)
 			{
 				auto uniqueID = ((sqf::Scalar*) (*arr)[0])->getValue();
 				if (uniqueID < 0 || uniqueID >= g_config.connections.size())
@@ -165,7 +166,7 @@ void addCommands(void)
 	g_commands.push_back(
 		sqf::Command(
 			"CLOSECONNECTION",
-			[](sqf::Array* arr)
+			[](sqf::Array* arr, char* output, int outputSize)
 			{
 				auto uniqueID = ((sqf::Scalar*) (*arr)[0])->getValue();
 				if (uniqueID < 0 || uniqueID >= g_config.connections.size())
@@ -183,7 +184,7 @@ void addCommands(void)
 	g_commands.push_back(
 		sqf::Command(
 			"CREATEOPERATIONSET",
-			[](sqf::Array* arr)
+			[](sqf::Array* arr, char* output, int outputSize)
 			{
 				auto uniqueID = ((sqf::Scalar*) (*arr)[0])->getValue();
 				if (uniqueID < 0 || uniqueID >= g_config.connections.size())
@@ -201,7 +202,7 @@ void addCommands(void)
 	g_commands.push_back(
 		sqf::Command(
 			"CLOSEOPERATIONSET",
-			[](sqf::Array* arr)
+			[](sqf::Array* arr, char* output, int outputSize)
 			{
 				auto uniqueID = ((sqf::Scalar*) (*arr)[0])->getValue();
 				if (uniqueID < 0 || uniqueID >= g_config.connections.size())
@@ -219,7 +220,7 @@ void addCommands(void)
 	if (g_config.allowNonPreparedSql) g_commands.push_back(
 		sqf::Command(
 			"EXECUTE",
-			[](sqf::Array* arr)
+			[](sqf::Array* arr, char* output, int outputSize)
 			{
 				auto uniqueID = ((sqf::Scalar*) (*arr)[0])->getValue();
 				if (uniqueID < 0 || uniqueID >= g_config.connections.size())
@@ -228,8 +229,8 @@ void addCommands(void)
 				}
 				auto con = g_config.connections[uniqueID];
 				
-				con->execute(((sqf::String*) (*arr)[1])->getValue(), "");
-				return std::string("[TRUE,\"\",NIL]");
+				auto result = con->execute(((sqf::String*) (*arr)[1])->getValue(), "");
+				return std::string("[TRUE,\"\",").append(result ? "TRUE" : "FALSE").append("]");
 			},
 			"[1, \"foobarKeyword\", \"SELECT * FROM table\"]",
 			"Performs an operation on given OperationSet. Returns a BOOL containing if the operation was successfully executed."
@@ -238,7 +239,7 @@ void addCommands(void)
 	g_commands.push_back(
 		sqf::Command(
 			"EXECUTESTATEMENT",
-			[](sqf::Array* arr)
+			[](sqf::Array* arr, char* output, int outputSize)
 			{
 				auto uniqueIDConnection = ((sqf::Scalar*) (*arr)[0])->getValue();
 				auto uniqueIDPreparedStatement = ((sqf::Scalar*) (*arr)[2])->getValue();
@@ -249,11 +250,132 @@ void addCommands(void)
 
 				auto con = g_config.connections[uniqueIDConnection];
 				auto stmnt = g_config.preparedStatements[uniqueIDPreparedStatement];
-				con->execute(((sqf::String*) (*arr)[1])->getValue(), stmnt->getStatementString(*((sqf::Array*) (*arr)[3])));
-				return std::string("[TRUE,\"\",NIL]");
+				auto result = con->execute(((sqf::String*) (*arr)[1])->getValue(), stmnt->getStatementString(*((sqf::Array*) (*arr)[3])));
+				return std::string("[TRUE,\"\",").append(result ? "TRUE" : "FALSE").append("]");
 			},
 			"[1, \"foobarKeyword\", 2, [<argumentName1>, <argument1>, <argumentName2>, <argument2>, <argumentNameN>, <argumentN>]]",
 			"Performs an operation on given OperationSet with given Statement.Statement Arguments have to be provided like this: [<argumentName1>, <argument1>, <argumentName2>, <argument2>, <argumentNameN>, <argumentN>]. Please note that ONLY STRINGS are allowed for arguments.",
+			false
+		)
+	);
+	if (g_config.allowNonPreparedSql) g_commands.push_back(
+		sqf::Command(
+			"EXECUTEQUERY",
+			[](sqf::Array* arr, char* output, int outputSize)
+			{
+				auto uniqueID = ((sqf::Scalar*) (*arr)[0])->getValue();
+				if (uniqueID < 0 || uniqueID >= g_config.connections.size())
+				{
+					throw std::exception(std::string("Connection '").append(to_string(uniqueID)).append("' is not existing").c_str());
+				}
+				auto con = g_config.connections[uniqueID];
+				
+				con->executeQuery(((sqf::String*) (*arr)[1])->getValue(), "");
+				return std::string("[TRUE,\"\",NIL]");
+			},
+			"[1, \"foobarKeyword\", \"SELECT * FROM table\"]",
+			"Performs an operation on given OperationSet. Returns a BOOL containing if the operation was successfully executed.OperationSet will be blocked until the query was either cleared or fully received!"
+		)
+	);
+	g_commands.push_back(
+		sqf::Command(
+			"EXECUTEQUERYSTATEMENT",
+			[](sqf::Array* arr, char* output, int outputSize)
+			{
+				auto uniqueIDConnection = ((sqf::Scalar*) (*arr)[0])->getValue();
+				auto uniqueIDPreparedStatement = ((sqf::Scalar*) (*arr)[2])->getValue();
+				if (uniqueIDConnection < 0 || uniqueIDConnection >= g_config.connections.size())
+					throw std::exception(std::string("Connection '").append(to_string(uniqueIDConnection)).append("' is not existing").c_str());
+				if (uniqueIDPreparedStatement < 0 || uniqueIDPreparedStatement >= g_config.connections.size())
+					throw std::exception(std::string("PreparedStatement '").append(to_string(uniqueIDPreparedStatement)).append("' is not existing").c_str());
+
+				auto con = g_config.connections[uniqueIDConnection];
+				auto stmnt = g_config.preparedStatements[uniqueIDPreparedStatement];
+				con->executeQuery(((sqf::String*) (*arr)[1])->getValue(), stmnt->getStatementString(*((sqf::Array*) (*arr)[3])));
+				return std::string("[TRUE,\"\",NIL]");
+			},
+			"[1, \"foobarKeyword\", 2, [<argumentName1>, <argument1>, <argumentName2>, <argument2>, <argumentNameN>, <argumentN>]]",
+			"Performs an operation on given OperationSet with given Statement.Statement Arguments have to be provided like this: [<argumentName1>, <argument1>, <argumentName2>, <argument2>, <argumentNameN>, <argumentN>]. Please note that ONLY STRINGS are allowed for arguments. OperationSet will be blocked until the query was either cleared or fully received!",
+			false
+		)
+	);
+	if (g_config.allowNonPreparedSql) g_commands.push_back(
+		sqf::Command(
+			"EXECUTEUPDATE",
+			[](sqf::Array* arr, char* output, int outputSize)
+			{
+				auto uniqueID = ((sqf::Scalar*) (*arr)[0])->getValue();
+				if (uniqueID < 0 || uniqueID >= g_config.connections.size())
+				{
+					throw std::exception(std::string("Connection '").append(to_string(uniqueID)).append("' is not existing").c_str());
+				}
+				auto con = g_config.connections[uniqueID];
+				
+				auto result = con->executeUpdate(((sqf::String*) (*arr)[1])->getValue(), "");
+				return std::string("[TRUE,\"\",").append(std::to_string(result)).append("]");
+			},
+			"[1, \"foobarKeyword\", \"SELECT * FROM table\"]",
+			"Performs an operation on given OperationSet. Returns a BOOL containing if the operation was successfully executed.OperationSet will be blocked until the query was either cleared or fully received!"
+		)
+	);
+	g_commands.push_back(
+		sqf::Command(
+			"EXECUTEUPDATESTATEMENT",
+			[](sqf::Array* arr, char* output, int outputSize)
+			{
+				auto uniqueIDConnection = ((sqf::Scalar*) (*arr)[0])->getValue();
+				auto uniqueIDPreparedStatement = ((sqf::Scalar*) (*arr)[2])->getValue();
+				if (uniqueIDConnection < 0 || uniqueIDConnection >= g_config.connections.size())
+					throw std::exception(std::string("Connection '").append(to_string(uniqueIDConnection)).append("' is not existing").c_str());
+				if (uniqueIDPreparedStatement < 0 || uniqueIDPreparedStatement >= g_config.connections.size())
+					throw std::exception(std::string("PreparedStatement '").append(to_string(uniqueIDPreparedStatement)).append("' is not existing").c_str());
+
+				auto con = g_config.connections[uniqueIDConnection];
+				auto stmnt = g_config.preparedStatements[uniqueIDPreparedStatement];
+				auto result = con->executeUpdate(((sqf::String*) (*arr)[1])->getValue(), stmnt->getStatementString(*((sqf::Array*) (*arr)[3])));
+				return std::string("[TRUE,\"\",").append(std::to_string(result)).append("]");
+			},
+			"[1, \"foobarKeyword\", 2, [<argumentName1>, <argument1>, <argumentName2>, <argument2>, <argumentNameN>, <argumentN>]]",
+			"Performs an operation on given OperationSet with given Statement.Statement Arguments have to be provided like this: [<argumentName1>, <argument1>, <argumentName2>, <argument2>, <argumentNameN>, <argumentN>]. Please note that ONLY STRINGS are allowed for arguments. OperationSet will be blocked until the query was either cleared or fully received!",
+			false
+		)
+	);
+	g_commands.push_back(
+		sqf::Command(
+			"NEXT",
+			[](sqf::Array* arr, char* output, int outputSize)
+			{
+				auto uniqueIDConnection = ((sqf::Scalar*) (*arr)[0])->getValue();
+				if (uniqueIDConnection < 0 || uniqueIDConnection >= g_config.connections.size())
+					throw std::exception(std::string("Connection '").append(to_string(uniqueIDConnection)).append("' is not existing").c_str());
+
+				auto con = g_config.connections[uniqueIDConnection];
+				std::string out;
+				
+				con->query_next(((sqf::String*) (*arr)[1])->getValue(), output, outputSize - 64);
+				return std::string("[TRUE,\"\",").append(sqf::String::escapeString(output)).append("]");
+			},
+			"[1, \"foobarKeyword\"]",
+			"Receives next results from query command. OperationSets are blocked until the query was either cleared or fully received!",
+			false
+		)
+	);
+	g_commands.push_back(
+		sqf::Command(
+			"CLEAR",
+			[](sqf::Array* arr, char* output, int outputSize)
+			{
+				auto uniqueIDConnection = ((sqf::Scalar*) (*arr)[0])->getValue();
+				if (uniqueIDConnection < 0 || uniqueIDConnection >= g_config.connections.size())
+					throw std::exception(std::string("Connection '").append(to_string(uniqueIDConnection)).append("' is not existing").c_str());
+
+				auto con = g_config.connections[uniqueIDConnection];
+				
+				con->query_clear(((sqf::String*) (*arr)[1])->getValue());
+				return std::string("[TRUE,\"\",NIL]");
+			},
+			"[1, \"foobarKeyword\"]",
+			"Receives next results from query command. OperationSets are blocked until the query was either cleared or fully received!",
 			false
 		)
 	);
@@ -469,6 +591,12 @@ void __stdcall RVExtension(char *output, int outputSize, const char *function)
 	//Check if config was read yet and load it
 	if (g_commands.empty())
 	{
+		g_outputSize = outputSize;
+		if (outputSize < 64)
+		{
+			strncpy(output, std::string("[FALSE,\"outputSize < 64\",NIL]").c_str(), outputSize);
+			return;
+		}
 		std::string& result = readConfig();
 		if (!result.empty())
 		{
@@ -519,7 +647,7 @@ void __stdcall RVExtension(char *output, int outputSize, const char *function)
 	try
 	{
 		for (auto& it : g_commands)
-			if (flag = it.runIfMatch(fnc, cmdOut, &arg, g_config.doCheckParams))
+			if (flag = it.runIfMatch(fnc, cmdOut, &arg, output, outputSize, g_config.doCheckParams))
 			{
 				strncpy(output, cmdOut.c_str(), outputSize);
 				break;

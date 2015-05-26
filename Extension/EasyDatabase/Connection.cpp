@@ -307,7 +307,7 @@ void Connection::query_next(const std::string& keyword, char* output, size_t out
 		this->mutex.unlock();
 		throw std::exception("Keyword is not existing");
 	}
-	
+
 	if (pair->second->resultSet == NULL)
 	{
 		this->mutex.unlock();
