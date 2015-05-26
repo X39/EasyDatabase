@@ -60,6 +60,11 @@ namespace sqf
 		static std::string String::unescapeString(const std::string s)
 		{
 			std::string returnString;
+			unescapeString(s, &returnString);
+			return returnString;
+		}
+		static size_t String::unescapeString(const std::string s, std::string* returnString)
+		{
 			bool flag = false;
 			for (size_t i = 0; i < s.length(); i++)
 			{
@@ -71,13 +76,13 @@ namespace sqf
 					switch (*(&c + 1))
 					{
 					case 't':
-						returnString.append("\t");
+						returnString->append("\t");
 						break;
 					case 'n':
-						returnString.append("\n");
+						returnString->append("\n");
 						break;
 					case 'r':
-						returnString.append("\r");
+						returnString->append("\r");
 						break;
 					}
 					break;
@@ -85,21 +90,22 @@ namespace sqf
 					if (*(&c + 1) == '"')
 						i++;
 					else
-						return returnString;
+						return i;
 				default:
-					returnString.append(&c, &c + 1);
+					returnString->append(&c, &c + 1);
 					break;
 				}
 			}
-			return returnString;
+			return s.length();
 		}
 		static unsigned int String::parsePartially(String* out, std::string in)
 		{
 			if (in[0] != '"')
 				throw std::exception("String has to start with \" to be parsed");
-			std::string& s = String::unescapeString(in.substr(1));
+			std::string s;
+			size_t len = String::unescapeString(in.substr(1), &s);
 			out->setValue(s);
-			return s.length() + 2;
+			return len + 1;
 		}
 	};
 }

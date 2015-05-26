@@ -1,5 +1,4 @@
 #pragma once
-#pragma once
 #include "Base.h"
 #include "Scalar.h"
 #include "Boolean.h"
@@ -10,16 +9,21 @@ namespace sqf
 	class Array : public Base
 	{
 	private:
+		bool _preventAutoDeleteOnArrayDecostruction;
 		std::vector<Base*> _arrayList;
 	public:
-		Array::Array() {}
+
+		Array::Array(bool PreventAutoDeleteOnArrayDecostruction = false) : _preventAutoDeleteOnArrayDecostruction(PreventAutoDeleteOnArrayDecostruction) {}
 		Array::~Array() 
 		{
-			for (auto& it : this->_arrayList)
+			if (!_preventAutoDeleteOnArrayDecostruction)
 			{
-				delete it;
+				for (auto& it : this->_arrayList)
+				{
+					delete it;
+				}
+				this->_arrayList.clear();
 			}
-			this->_arrayList.clear();
 		}
 		inline Type Array::getType(void) const
 		{
@@ -49,9 +53,9 @@ namespace sqf
 		{
 			this->_arrayList.pop_back();
 		}
-		Base* Array::operator[](int i)
+		Base* Array::operator[](size_t i)
 		{
-			int len = this->length();
+			size_t len = this->length();
 			if (i >= len)
 				throw std::out_of_range("Given index is out of range");
 			return this->_arrayList[i];
