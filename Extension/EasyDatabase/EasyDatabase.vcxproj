@@ -95,6 +95,7 @@
     <ClInclude Include="sqf\Array.h" />
     <ClInclude Include="sqf\Base.h" />
     <ClInclude Include="sqf\Boolean.h" />
+    <ClInclude Include="sqf\Command.h" />
     <ClInclude Include="sqf\Scalar.h" />
     <ClInclude Include="sqf\String.h" />
   </ItemGroup>

@@ -1,126 +1,187 @@
+#define _VERSION_ "BETA-0.1.0"
 #include "dllMain.h"
 #include "dotX39\DocumentReader.h"
 #include "dotX39\DataString.h"
 #include "dotX39\DataBoolean.h"
+#include "Connection.hpp"
+#include "PreparedStatement.hpp"
+#include "sqf\Array.h"
+#include "sqf\Command.h"
 
 
-#define WIN32_LEAN_AND_MEAN             // Exclude rarely-used stuff from Windows headers
+#define WIN32_LEAN_AND_MEAN // Exclude rarely-used stuff from Windows headers
 // Windows Header Files:
 #include <windows.h>
 
 // Standad C++ includes
-#include <iostream>
-#include <cstdlib>
-#include <thread>
-#include <stdio.h>
-#include <ctime>
-#include <sstream>
-#include <mutex>
 #include <vector>
-#include <array>
 using namespace std;
 
 // Include the Connector/C++ headers
-#include <cppconn\driver.h>
-#include <cppconn\connection.h>
-#include <cppconn\resultset.h>
-#include <cppconn\statement.h>
 #ifdef _DEBUG
 #define CONNECTION_CHECK_TIMEOUT 100
 #else
 #define CONNECTION_CHECK_TIMEOUT 30000
 #endif
 
-//static struct config {
-//	std::vector<CONNECTION> connections;
-//	std::vector<PREPAREDSTATEMENT> preparedStatements;
-//	int getUniqueIdOfConnection(const char* name)
-//	{
-//		int uniqueId = -1;
-//		for (int i = 0; i < connections.size(); i++)
-//		{
-//			if (connections[i].name.compare(name) == 0)
-//			{
-//				uniqueId = i;
-//				break;
-//			}
-//		}
-//		return uniqueId;
-//	}
-//	int getUniqueIdOfPreparedStatements(const char* name)
-//	{
-//		int uniqueId = -1;
-//		for (int i = 0; i < preparedStatements.size(); i++)
-//		{
-//			if (preparedStatements[i].name.compare(name) == 0)
-//			{
-//				uniqueId = i;
-//				break;
-//			}
-//		}
-//		return uniqueId;
-//	}
-//} g_config;
-static bool								g_initialized = false;
-static std::string						g_lastError;
-static sql::Driver*						g_dbDriver = NULL;
-
-//Function for RVExtension output
-void setBool(char* out, unsigned int maxOut, bool flag)
-{
-	if (flag)
+static struct structConfig {
+	std::vector<Connection*> connections;
+	std::vector<PreparedStatement*> preparedStatements;
+	bool doToUpperForCommands;
+	bool doCheckParams;
+	structConfig()
 	{
-		char tmp[] = "TRUE";
-		if (strlen(tmp) >= maxOut)
-			return;
-		strcpy(out, tmp);
+		doToUpperForCommands = true;
+		doCheckParams = true;
 	}
-	else
+	~structConfig()
 	{
-		char tmp[] = "FALSE";
-		if (strlen(tmp) >= maxOut)
-			return;
-		strcpy(out, tmp);
+		clear();
 	}
-}
-//Function for RVExtension output
-void setArray_Bool_Index(char* out, unsigned int maxOut, bool flag, int index)
-{
-	std::string tmp = std::string("[").append(flag ? "TRUE" : "FALSE").append(",").append(to_string(index)).append("]");
-	if (tmp.size() >= maxOut)
-		return;
-	strcpy(out, tmp.c_str());
-}
+	int getUniqueIdOfConnection(const char* name)
+	{
+		int uniqueId = -1;
+		for (int i = 0; i < connections.size(); i++)
+		{
+			if (connections[i]->getName().compare(name) == 0)
+			{
+				uniqueId = i;
+				break;
+			}
+		}
+		return uniqueId;
+	}
+	int getUniqueIdOfPreparedStatements(const char* name)
+	{
+		int uniqueId = -1;
+		for (int i = 0; i < preparedStatements.size(); i++)
+		{
+			if (preparedStatements[i]->getName().compare(name) == 0)
+			{
+				uniqueId = i;
+				break;
+			}
+		}
+		return uniqueId;
+	}
+	void clear(void)
+	{
+		for (auto& it : this->connections)
+			delete it;
+		for (auto& it : this->preparedStatements)
+			delete it;
+		this->connections.clear();
+		this->preparedStatements.clear();
+	}
+} g_config;
+static std::vector<sqf::Command>		g_commands;
 
-//Changes LastError variable
-inline void setLastError(void)
+void toUpper(std::string& s)
 {
-	if (g_lastError.empty())
-		return;
-	setLastError("");
+	for (int i = s.length - 1; i >= 0; i--)
+		s[i] = toupper(s[i]);
 }
-//Changes LastError variable
-inline void setLastError(const std::string& str)
+void toUpper(char* s)
 {
-	setLastError(str.c_str());
+	for (int i = 0; s[i] != '\0'; i++)
+		s[i] = toupper(s[i]);
 }
-//Changes LastError variable
-inline void setLastError(const char* str)
+void addCommands(void)
 {
-	g_lastError = std::string(str);
+	g_commands.push_back(
+		sqf::Command(
+			"ABOUT",
+			[](sqf::Array* arr)
+			{
+				return std::string("[TRUE,\"\",\"").append("EasyDatabase is an extension for ArmA 3 developed and maintained by X39.").append("\"]");
+			},
+			"[]",
+			"Returns informations about the DLL. Returns a STRING."
+		)
+	);
+	g_commands.push_back(
+		sqf::Command(
+			"VERSION",
+			[](sqf::Array* arr)
+			{
+				return std::string("[TRUE,\"\",\"").append(_VERSION_).append("\"]");
+			},
+			"[]",
+			"Returns current version of the DLL. Returns a STRING."
+		)
+	);
+	g_commands.push_back(
+		sqf::Command(
+			"GETPREPAREDSTATEMENT",
+			[](sqf::Array* arr)
+			{
+				auto uniqueID = g_config.getUniqueIdOfPreparedStatements(((sqf::String*) (*arr)[0])->getValue().c_str());
+				if (uniqueID < 0)
+				{
+					throw std::exception(std::string("PreparedStatement '").append(((sqf::String*) (*arr)[0])->getValue()).append("' is not existing").c_str());
+				}
+				return std::string("[TRUE,\"\",").append(to_string(uniqueID)).append("]");
+			},
+			"[\"STRING\"]",
+			"Searches for the PreparedStatement and returns its UniqueID. Returns a SCALAR."
+		)
+	);
+	g_commands.push_back(
+		sqf::Command(
+			"GETCONNECTION",
+			[](sqf::Array* arr)
+			{
+				auto uniqueID = g_config.getUniqueIdOfConnection(((sqf::String*) (*arr)[0])->getValue().c_str());
+				if (uniqueID < 0)
+				{
+					throw std::exception(std::string("Connection '").append(((sqf::String*) (*arr)[0])->getValue()).append("' is not existing").c_str());
+				}
+				return std::string("[TRUE,\"\",").append(to_string(uniqueID)).append("]");
+			},
+			"[\"STRING\"]",
+			"Searches for the Connection and returns its UniqueID. Returns a SCALAR."
+		)
+	);
+	g_commands.push_back(
+		sqf::Command(
+			"OPENCONNECTION",
+			[](sqf::Array* arr)
+			{
+				auto uniqueID = ((sqf::Scalar*) (*arr)[0])->getValue();
+				if (uniqueID < 0 || uniqueID >= g_config.connections.size())
+				{
+					throw std::exception(std::string("Connection '").append(to_string(uniqueID)).append("' is not existing").c_str());
+				}
+				auto con = g_config.connections[uniqueID];
+				con->openConnection(((sqf::Scalar*) (*arr)[1])->getValue());
+				return std::string("[TRUE,\"\",NIL]");
+			},
+			"[1, 0]",
+			"Opens given connection and starts the connection tracker (if Param2 is > 0) Returns a NIL value."
+		)
+	);
+	g_commands.push_back(
+		sqf::Command(
+			"CLOSECONNECTION",
+			[](sqf::Array* arr)
+			{
+				auto uniqueID = ((sqf::Scalar*) (*arr)[0])->getValue();
+				if (uniqueID < 0 || uniqueID >= g_config.connections.size())
+				{
+					throw std::exception(std::string("Connection '").append(to_string(uniqueID)).append("' is not existing").c_str());
+				}
+				auto con = g_config.connections[uniqueID];
+				con->closeConnection();
+				return std::string("[TRUE,\"\",NIL]");
+			},
+			"[1]",
+			"Searches for the Connection and returns its UniqueID. Returns a SCALAR."
+		)
+	);
 }
-
-
-void clearConfig(void)
+std::string readConfig(void)
 {
-	/*
-	g_config.connections.clear();
-	g_config.preparedStatements.clear();
-	*/
-}
-bool readConfig(void)
-{
-/*	clearConfig();
+	g_config.clear();
 	dotX39::Node* root = new dotX39::Node("root");
 	try 
 	{
@@ -128,21 +189,50 @@ bool readConfig(void)
 	}
 	catch (std::exception e)
 	{
-		setLastError(std::string("Error while reading config file: ").append(e.what()));
-		delete root;
-		return false;
+		return std::string("Error while reading config file: ").append(e.what());
 	}
 	for (int rootNodeIndex = 0; rootNodeIndex < root->getNodeCount(); rootNodeIndex++)
 	{
 		const dotX39::Node* layer1 = root->getNode(rootNodeIndex);
 		const std::string& layer1Name = layer1->getName();
-		if (layer1Name.compare("connections") == 0)
+		if (layer1Name.compare("settings") == 0)
+		{
+			for (int layer2DataIndex = 0; layer2DataIndex < layer1->getDataCount(); layer2DataIndex++)
+			{
+				const dotX39::Data* data = layer1->getData(layer2DataIndex);
+				const std::string& dataName = data->getName();
+				auto dataType = data->getType();
+				if (dataName.compare("doToUpperForCommands") == 0)
+				{
+					if (dataType != dotX39::DataTypes::BOOLEAN)
+					{
+						delete root;
+						return std::string("Error while reading config file: Settings '").append(dataName).append("' has invalid datatype, expected BOOLEAN");
+					}
+					g_config.doToUpperForCommands = ((dotX39::DataBoolean*)data)->getDataAsBoolean();
+				}
+				if (dataName.compare("doCheckParams") == 0)
+				{
+					if (dataType != dotX39::DataTypes::BOOLEAN)
+					{
+						delete root;
+						return std::string("Error while reading config file: Settings '").append(dataName).append("' has invalid datatype, expected BOOLEAN");
+					}
+					g_config.doCheckParams = ((dotX39::DataBoolean*)data)->getDataAsBoolean();
+				}
+			}
+		}
+		else if (layer1Name.compare("connections") == 0)
 		{
 			for (int layer1NodeIndex = 0; layer1NodeIndex < layer1->getNodeCount(); layer1NodeIndex++)
 			{
 				const dotX39::Node* layer2 = layer1->getNode(layer1NodeIndex);
-				CONNECTION con;
-				con.name = layer2->getName();
+				std::string name = layer2->getName();
+				std::string serverUri;
+				std::string database;
+				std::string username;
+				std::string password;
+				
 				for (int layer2ArgumentIndex = 0; layer2ArgumentIndex < layer2->getArgumentCount(); layer2ArgumentIndex++)
 				{
 					const dotX39::Data* arg = layer2->getArgument(layer2ArgumentIndex);
@@ -150,69 +240,62 @@ bool readConfig(void)
 					dotX39::DataTypes argType = arg->getType();
 					if (argName.compare("serverUri") == 0)
 					{
-						if (argType == dotX39::DataTypes::STRING)
+						if (argType != dotX39::DataTypes::STRING)
 						{
-							setLastError(std::string("Error while reading config file: Connection '").append(layer2->getName()).append("' has invalid datatype for ").append(argName).append("', expected STRING"));
 							delete root;
-							return false;
+							return std::string("Error while reading config file: Connection '").append(layer2->getName()).append("' has invalid datatype for ").append(argName).append("', expected STRING");
 						}
-						con.serverUri = ((dotX39::DataString*)arg)->getDataAsString();
+						serverUri = ((dotX39::DataString*)arg)->getDataAsString();
 					}
 					else if (argName.compare("database") == 0)
 					{
-						if (argType == dotX39::DataTypes::STRING)
+						if (argType != dotX39::DataTypes::STRING)
 						{
-							setLastError(std::string("Error while reading config file: Connection '").append(layer2->getName()).append("' has invalid datatype for ").append(argName).append("', expected STRING"));
 							delete root;
-							return false;
+							return std::string("Error while reading config file: Connection '").append(layer2->getName()).append("' has invalid datatype for ").append(argName).append("', expected STRING");
 						}
-						con.database = ((dotX39::DataString*)arg)->getDataAsString();
+						database = ((dotX39::DataString*)arg)->getDataAsString();
 					}
 					else if (argName.compare("username") == 0)
 					{
-						if (argType == dotX39::DataTypes::STRING)
+						if (argType != dotX39::DataTypes::STRING)
 						{
-							setLastError(std::string("Error while reading config file: Connection '").append(layer2->getName()).append("' has invalid datatype for ").append(argName).append("', expected STRING"));
 							delete root;
-							return false;
+							return std::string("Error while reading config file: Connection '").append(layer2->getName()).append("' has invalid datatype for ").append(argName).append("', expected STRING");
 						}
-						con.username = ((dotX39::DataString*)arg)->getDataAsString();
+						username = ((dotX39::DataString*)arg)->getDataAsString();
 					}
 					else if (argName.compare("password") == 0)
 					{
-						if (argType == dotX39::DataTypes::STRING)
+						if (argType != dotX39::DataTypes::STRING)
 						{
-							setLastError(std::string("Error while reading config file: Connection '").append(layer2->getName()).append("' has invalid datatype for ").append(argName).append("', expected STRING"));
 							delete root;
-							return false;
+							return std::string("Error while reading config file: Connection '").append(layer2->getName()).append("' has invalid datatype for ").append(argName).append("', expected STRING");
 						}
-						con.password = ((dotX39::DataString*)arg)->getDataAsString();
+						password = ((dotX39::DataString*)arg)->getDataAsString();
 					}
 					else
 					{
-						setLastError(std::string("Error while reading config file: Connection '").append(layer2->getName()).append("' contains unknown argument: ").append(argName));
 						delete root;
-						return false;
+						return std::string("Error while reading config file: Connection '").append(layer2->getName()).append("' contains unknown argument: ").append(argName);
 					}
 				}
-				std::string isValidString;
-				if (!con.isValid(&isValidString))
+				if (serverUri.empty() || database.empty() || username.empty())
 				{
-					setLastError(std::string("Error while reading config file: Connection '").append(layer2->getName()).append("' is missing arguments: ").append(isValidString));
 					delete root;
-					return false;
+					return std::string("Error while reading config file: Connection '").append(layer2->getName()).append("' is missing arguments");
 				}
-				g_config.connections.push_back(con);
+				g_config.connections.push_back(new Connection(name, serverUri, database, username, password));
 			}
 		}
-		else if (layer1Name.compare("PreparedStatements") == 0)
+		else if (layer1Name.compare("preparedStatements") == 0)
 		{
 
 			for (int layer1NodeIndex = 0; layer1NodeIndex < layer1->getNodeCount(); layer1NodeIndex++)
 			{
 				const dotX39::Node* layer2 = layer1->getNode(layer1NodeIndex);
-				PREPAREDSTATEMENT statement;
-				statement.name = layer2->getName();
+				std::string name = layer2->getName();
+				std::string stmnt;
 				for (int layer2ArgumentIndex = 0; layer2ArgumentIndex < layer2->getArgumentCount(); layer2ArgumentIndex++)
 				{
 					const dotX39::Data* arg = layer2->getArgument(layer2ArgumentIndex);
@@ -220,21 +303,25 @@ bool readConfig(void)
 					dotX39::DataTypes argType = arg->getType();
 					if (argName.compare("statement") == 0)
 					{
-						if (argType == dotX39::DataTypes::STRING)
+						if (argType != dotX39::DataTypes::STRING)
 						{
-							setLastError(std::string("Error while reading config file: PreparedStatement '").append(layer2->getName()).append("' has invalid datatype for '").append(argName).append("', expected STRING"));
 							delete root;
-							return false;
+							return std::string("Error while reading config file: PreparedStatement '").append(layer2->getName()).append("' has invalid datatype for '").append(argName).append("', expected STRING");
 						}
-						statement.statement = ((dotX39::DataString*)arg)->getDataAsString();
+						stmnt = ((dotX39::DataString*)arg)->getDataAsString();
 					}
 					else
 					{
-						setLastError(std::string("Error while reading config file: PreparedStatement '").append(layer2->getName()).append("' contains unknown argument: ").append(argName));
 						delete root;
-						return false;
+						return std::string("Error while reading config file: PreparedStatement '").append(layer2->getName()).append("' contains unknown argument: ").append(argName);
 					}
 				}
+				if (stmnt.empty())
+				{
+					delete root;
+					return std::string("Error while reading config file: PreparedStatement '").append(layer2->getName()).append("' is missing arguments");
+				}
+				PreparedStatement* statement = new PreparedStatement(name, stmnt);
 				for (int layer2NodeIndex = 0; layer2NodeIndex < layer2->getNodeCount(); layer2NodeIndex++)
 				{
 					const dotX39::Node* layer3 = layer2->getNode(layer2NodeIndex);
@@ -247,441 +334,119 @@ bool readConfig(void)
 						dotX39::DataTypes argType = arg->getType();
 						if (argName.compare("token") == 0)
 						{
-							if (argType == dotX39::DataTypes::STRING)
+							if (argType != dotX39::DataTypes::STRING)
 							{
-								setLastError(std::string("Error while reading config file: PreparedStatement '").append(layer2->getName()).append("' has invalid datatype for '").append(argName).append("', expected STRING"));
 								delete root;
-								return false;
+								delete statement;
+								return std::string("Error while reading config file: PreparedStatement '").append(layer2->getName()).append("' has invalid datatype for '").append(argName).append("', expected STRING");
 							}
 							token = ((dotX39::DataString*)arg)->getDataAsString();
 						}
 						if (argName.compare("escape") == 0)
 						{
-							if (argType == dotX39::DataTypes::BOOLEAN)
+							if (argType != dotX39::DataTypes::BOOLEAN)
 							{
-								setLastError(std::string("Error while reading config file: PreparedStatement '").append(layer2->getName()).append("' has invalid datatype for '").append(argName).append("', expected BOOLEAN"));
 								delete root;
-								return false;
+								delete statement;
+								return std::string("Error while reading config file: PreparedStatement '").append(layer2->getName()).append("' has invalid datatype for '").append(argName).append("', expected BOOLEAN");
 							}
 							isEscaped = ((dotX39::DataBoolean*)arg)->getDataAsBoolean();
 						}
 						else
 						{
-							setLastError(std::string("Error while reading config file: PreparedStatement '").append(layer2->getName()).append("' contains unknown argument: ").append(argName));
 							delete root;
-							return false;
+							delete statement;
+							return std::string("Error while reading config file: PreparedStatement '").append(layer2->getName()).append("' contains unknown argument: ").append(argName);
 						}
 					}
 					if (token.empty())
 					{
-						setLastError(std::string("Error while reading config file: PreparedStatement '").append(layer2->getName()).append("' is missing argument: 'token"));
 						delete root;
-						return false;
+						delete statement;
+						return std::string("Error while reading config file: PreparedStatement '").append(layer2->getName()).append("' is missing argument: 'token");
 					}
-					statement.arguments.push_back(ARGUMENT(layer3->getName(), token, false));
-				}
-				std::string isValidString;
-				if (!statement.isValid(&isValidString))
-				{
-					setLastError(std::string("Error while reading config file: PreparedStatement '").append(layer2->getName()).append("' is missing arguments: ").append(isValidString));
-					delete root;
-					return false;
+					statement->addArgument(PreparedStatement::ARGUMENT(layer3->getName(), token, false));
 				}
 				g_config.preparedStatements.push_back(statement);
 			}
 		}
 	}
 	delete root;
-	*/
-	return true;
+	return "";
 }
+
+//Return array always: [<Success:BOOL>, <Error:STRING>, <FunctionResult:UNKNOWN>]
 void __stdcall RVExtension(char *output, int outputSize, const char *function)
 {
-	/*
-	g_connectionWatchMutex.lock();
-	//Split function parameter into propper function parameters and
-	//do error checking for function parameter
-	bool argPresent = true;
-	std::string fnc;
-	std::string arg;
-	int functionLen = strlen(function);
-	int tmpFunctionLen;
-	output[0] = 0;
-	if (functionLen < 3)
-		goto functionEnd;
-	const char* tmpFunction = strchr(function, ',');
-	if (tmpFunction == NULL)
+	if (g_commands.empty())
 	{
-		argPresent = false;
-		tmpFunction = strrchr(function, ']');
-		if (tmpFunction == NULL)
-			goto functionEnd;
+		std::string& result = readConfig();
+		if (!result.empty())
+		{
+			strncpy(output, std::string("[FALSE,\"").append(result).append("\",NIL]").c_str(), outputSize);
+			return;
+		}
+		addCommands();
 	}
-	tmpFunctionLen = strlen(tmpFunction);
-	if (functionLen - 2 <= 0 || functionLen - tmpFunctionLen - 2 <= 0)
-		goto functionEnd;
-	fnc = std::string(function + 2, tmpFunction - 1);
+	//Do basic function parsing
+	sqf::Array arr;
+	try
+	{
+		sqf::Array::parsePartially(&arr, function);
+	}
+	catch (std::exception e)
+	{
+		strncpy(output, std::string("[FALSE,\"").append("Error while reading input: ").append(sqf::String::escapeString(e.what())).append("\",NIL]").c_str(), outputSize);
+		return;
+	}
+	size_t paramCount = arr.length();
+	if (paramCount < 2)
+	{
+		if (paramCount == 0)
+			strncpy(output, std::string("[FALSE,\"").append("Error while reading input: No Function provided.").append("\",NIL]").c_str(), outputSize);
+		else
+			strncpy(output, std::string("[FALSE,\"").append("Error while reading input: Missing default argument.").append("\",NIL]").c_str(), outputSize);
+		return;
+	}
+	sqf::Base& tmpFnc = *arr[0];
+	if (tmpFnc.getType() != sqf::Type::STRING)
+	{
+		strncpy(output, std::string("[FALSE,\"").append("First function parameter was NOT of the type string!").append("\",NIL]").c_str(), outputSize);
+		return;
+	}
 
-	if (argPresent)
+	sqf::Base& tmpArg = *arr[1];
+	if (tmpArg.getType() != sqf::Type::STRING)
 	{
-		if (tmpFunctionLen < 3)
-			goto functionEnd;
-		const char* tmpArg = strrchr(tmpFunction, ']');
-		
-		if (tmpArg == NULL)
-			goto functionEnd;
-		//No error check needed because of handling from -11 lines
-		arg = std::string(tmpFunction + 1, tmpArg);
+		strncpy(output, std::string("[FALSE,\"").append("Second function parameter was NOT of the type array!").append("\",NIL]").c_str(), outputSize);
+		return;
 	}
-	//move into the different function
-	if (false){} //For simple switching of the commands, compiler should remove it during compile time
-#pragma region Function NEXT
-	else if (fnc.compare("NEXT") == NULL)
-	{
-		unsigned int index;
-		try	{ index = std::stoul(arg, nullptr, 10); }
-		catch (std::exception e) { setLastError(e.what()); setBool(output, outputSize, false); goto functionEnd; }
-		if (index >= g_sqlVector.size()) { setLastError("Given index is out of range"); setBool(output, outputSize, false); goto functionEnd; }
-		SQLCONTAINER* container = g_sqlVector[index];
-		if (container->statement == NULL)
-		{
-			setLastError("Please open a statement before trying to operate on it.");
-			goto functionEnd;
-		}
-		if (container->resultSet == NULL)
-		{
-			setLastError("Please query a statement before trying to get results from it.");
-			goto functionEnd;
-		}
-		if (container->buffer.peek() == EOF)
-		{//Load a new row into the stringstream
-			if (container->resultSet->next())
-			{
-				container->buffer.clear();
-				container->buffer << '[';
-				int cellIndex = 1;
-				try
-				{
-					auto columnCount = container->resultSet->getMetaData()->getColumnCount();
-					for (unsigned int i = 1; i <= columnCount; i++)
-					{
-						std::string res = container->resultSet->getString(cellIndex);
-						if (cellIndex > 1)
-							container->buffer << ",\"" << res << '"';
-						else
-							container->buffer << '"' << res << '"';
-						cellIndex++;
-					}
-				}
-				catch (std::exception e) { }
-				container->buffer << ']';
-			}
-			else
-			{
-				container->resultSet->close();
-				delete container->resultSet;
-				container->resultSet = NULL;
-				strcpy(output, "");
-				goto functionEnd;
-			}
-		}
-		container->buffer.readsome(output, outputSize - 1);
-		output[container->buffer.gcount()] = '\0';
-	}
-#pragma endregion
-#pragma region Function QUERY
-	else if (fnc.compare("QUERY") == NULL)
-	{
-		unsigned int index;
-		try	{ index = std::stoul(arg, nullptr, 10); }
-		catch (std::exception e) { setLastError(e.what()); setBool(output, outputSize, false); goto functionEnd; }
-		if (index >= g_sqlVector.size()) { setLastError("Given index is out of range"); setBool(output, outputSize, false); goto functionEnd; }
-		SQLCONTAINER* container = g_sqlVector[index];
-		const char* tmpStr = strchr(arg.c_str(), ',');
-		if(tmpStr == NULL)
-		{
-			setLastError("Could not find SQL Statement at third place.");
-			setBool(output, outputSize, false);
-			goto functionEnd;
-		}
-		arg = tmpStr + 1;
-		arg.erase(arg.begin());
-		arg.erase(arg.end() - 1);
-		if (container->statement == NULL)
-		{
-			setLastError("Please open a statement before trying to operate on it.");
-			setBool(output, outputSize, false);
-			goto functionEnd;
-		}
-		if (container->resultSet != NULL)
-		{
-			setLastError("The last query is not done yet. Please use either CLEAR or NEXT to continue.");
-			setBool(output, outputSize, false);
-			goto functionEnd;
-		}
-		try
-		{
-			container->resultSet = container->statement->executeQuery(arg);
-			setBool(output, outputSize, true);
-		}
-		catch (sql::SQLException e)
-		{
-			setLastError(std::string("SQL error. Error message: ").append(e.what()));
-		}
-	}
-#pragma endregion
-#pragma region Function UPDATE
-	else if (fnc.compare("UPDATE") == NULL)
-	{
-		unsigned int index;
-		try	{ index = std::stoul(arg, nullptr, 10); }
-		catch (std::exception e) { setLastError(e.what()); setBool(output, outputSize, false); goto functionEnd; }
-		if (index >= g_sqlVector.size()) { setLastError("Given index is out of range"); setBool(output, outputSize, false); goto functionEnd; }
-		SQLCONTAINER* container = g_sqlVector[index];
-		if (container->statement == NULL)
-		{
-			setLastError("Please open a statement before trying to operate on it.");
-			setBool(output, outputSize, false);
-			goto functionEnd;
-		}
-		if (container->resultSet == NULL)
-		{
-			setLastError("The last query is not done yet. Please use either CLEAR or NEXT to continue.");
-			setBool(output, outputSize, false);
-			goto functionEnd;
-		}
-		try
-		{
-			container->statement->execute(arg);
-			setBool(output, outputSize, true);
-		}
-		catch (sql::SQLException e)
-		{
-			setLastError(std::string("SQL error. Error message: ").append(e.what()));
-		}
-	}
-#pragma endregion
-#pragma region Function CLOSESTMT
-	else if (fnc.compare("CLOSESTMT") == NULL)
-	{
-		unsigned int index;
-		try	{ index = std::stoul(arg, nullptr, 10); }
-		catch (std::exception e) { setLastError(e.what()); setBool(output, outputSize, false); goto functionEnd; }
-		if (index >= g_sqlVector.size()) { setLastError("Given index is out of range"); setBool(output, outputSize, false); goto functionEnd; }
-		SQLCONTAINER* container = g_sqlVector[index];
-		if (container->statement == NULL)
-		{
-			setLastError("Please open a statement before trying to close it.");
-			setBool(output, outputSize, false);
-			goto functionEnd;
-		}
-		if (container->resultSet != NULL)
-		{
-			container->resultSet->close();
-			delete container->resultSet;
-			container->resultSet = NULL;
-		}
-		delete container->statement;
-		container->statement = NULL;
-		setBool(output, outputSize, true);
-	}
-#pragma endregion
-#pragma region Function CREATESTMT
-	else if (fnc.compare("CREATESTMT") == NULL)
-	{
-		unsigned int index = 0;
-		SQLCONTAINER* container = NULL;
-		for (int i = 0; i < g_sqlVector.size(); i++)
-		{
-			if (g_sqlVector[i]->statement == NULL)
-			{
-				index = i;
-				container = g_sqlVector[i];
-				break;
-			}
-		}
-		if (container == NULL)
-		{
-			index = g_sqlVector.size();
-			container = new SQLCONTAINER();
-			g_sqlVector.push_back(container);
-		}
-		if (g_dbConn == NULL)
-		{
-			setLastError("Please OPEN a connection before trying to create a statement.");
-			setArray_Bool_Index(output, outputSize, false, -1);
-			goto functionEnd;
-		}
-		if (container->statement != NULL)
-		{
-			setLastError("Please close a statement before trying to create a new one");
-			setArray_Bool_Index(output, outputSize, false, -1);
-			goto functionEnd;
-		}
-		if (container->resultSet != NULL)
-		{
-			setLastError("Please close a statement before trying to create a new one");
-			setArray_Bool_Index(output, outputSize, false, -1);
-			goto functionEnd;
-		}
-		try
-		{
-			container->statement = g_dbConn->createStatement();
-			container->statement->execute(std::string("use ").append(g_mysqlDatabase));
-			setArray_Bool_Index(output, outputSize, true, index);
-		}
-		catch (sql::SQLException e)
-		{
-			setLastError(std::string(e.what()));
-			setArray_Bool_Index(output, outputSize, false, -1);
-			goto functionEnd;
-		}
-	}
-#pragma endregion
-#pragma region Function CLEAR
-	else if (fnc.compare("CLEAR") == NULL)
-	{
-		unsigned int index;
-		try	{ index = std::stoul(arg, nullptr, 10); }
-		catch (std::exception e) { setLastError(e.what()); setBool(output, outputSize, false); goto functionEnd; }
-		if (index >= g_sqlVector.size()) { setLastError("Given index is out of range"); setBool(output, outputSize, false); goto functionEnd; }
-		SQLCONTAINER* container = g_sqlVector[index];
 
-		container->buffer.clear();
-		if (container->resultSet != NULL)
-		{
-			container->resultSet->close();
-			delete container->resultSet;
-			container->resultSet = NULL;
-		}
-		setBool(output, outputSize, true);
-	}
-#pragma endregion
-#pragma region Function GETLASTERROR
-	else if (fnc.compare("GETLASTERROR") == NULL)
+	sqf::Array& arg = *(sqf::Array*)arr[1];
+	std::string fnc = ((sqf::String&)tmpFnc).getValue();
+	if (g_config.doToUpperForCommands)
+		toUpper(fnc);
+	bool flag = false;
+	std::string cmdOut;
+	try
 	{
-		if (outputSize <= g_lastError.size())
-			goto functionEnd;
-		strcpy(output, g_lastError.c_str());
+	for (auto& it : g_commands)
+		if (flag = it.runIfMatch(fnc, cmdOut, &arg, g_config.doCheckParams))
+		{
+			strncpy(output, cmdOut.c_str(), outputSize);
+			break;
+		}
 	}
-#pragma endregion
-#pragma region Function OPEN
-	else if (fnc.compare("OPEN") == NULL)
+	catch (std::exception e)
 	{
-		if (!g_initialized) { setLastError("You need to call INIT before you can open a connection."); setBool(output, outputSize, false); goto functionEnd; }
-		if (g_dbConn != NULL) { setBool(output, outputSize, true); goto functionEnd; }
-		try
-		{
-			
-			g_dbConn = g_dbDriver->connect(g_mysqlServer, g_mysqlUsername, g_mysqlPassword);
-			if (!arg.empty())
-			{//Run async auto close thread
-				unsigned int timeout = std::stoul(arg, nullptr, 10);
-				if (timeout != 0)
-				{
-					updateLastConnectionAccess();
-					std::thread t = std::thread(connectionWatch, timeout);
-					t.detach();
-				}
-			}
-		}
-		catch (sql::SQLException e)
-		{
-			setLastError(std::string("Could not connect to database. Error message: ").append(e.what()));
-			setBool(output, outputSize, false);
-			goto functionEnd;
-		}
-		catch (std::invalid_argument e)
-		{
-			setLastError(std::string("Cannot interpret argument as UNSIGNED INT. Error message: ").append(e.what()));
-			setBool(output, outputSize, false);
-			goto functionEnd;
-		}
-		catch (std::out_of_range e)
-		{
-			setLastError(std::string("Provided value is out of range. Error message: ").append(e.what()));
-			setBool(output, outputSize, false);
-			goto functionEnd;
-		}
-		catch (std::exception e)
-		{
-			setLastError(std::string("Unknown Error. Error message: ").append(e.what()));
-			setBool(output, outputSize, false);
-			goto functionEnd;
-		}
-		setBool(output, outputSize, true);
+		strncpy(output, std::string("[FALSE,\"").append("Function '").append(fnc).append("' raised an exception. Hint: ").append(e.what()).append("\",NIL]").c_str(), outputSize);
+		return;
 	}
-#pragma endregion
-#pragma region Function KEEPOPEN
-	else if (fnc.compare("KEEPOPEN") == NULL)
+	if (!flag)
 	{
-		if (g_dbConn == NULL)
-		{
-			setLastError();
-			setBool(output, outputSize, false);
-			goto functionEnd;
-		}
-		updateLastConnectionAccess();
-		setBool(output, outputSize, true);
+		strncpy(output, std::string("[FALSE,\"").append("Function '").append(fnc).append("' is unknown. Hint: Function names are case-sensitive!\",NIL]").c_str(), outputSize);
+		return;
 	}
-#pragma endregion
-#pragma region Function CLOSE
-	else if (fnc.compare("CLOSE") == NULL)
-	{
-		if (g_dbConn == NULL)
-		{
-			setLastError("Please OPEN a connection before trying to close");
-			setBool(output, outputSize, false);
-			goto functionEnd;
-		}
-		if (!closeConnection())
-		{
-			setBool(output, outputSize, false);
-			goto functionEnd;
-		}
-		setBool(output, outputSize, true);
-	}
-#pragma endregion
-#pragma region Function INIT
-	else if (fnc.compare("INIT") == NULL)
-	{
-		if (g_initialized) { setBool(output, outputSize, g_initialized); goto functionEnd; }
-		if (!readConfig()) { setBool(output, outputSize, g_initialized); goto functionEnd; }
-		if (g_config.connections.empty()) { setLastError("Config file contains no connection"); setBool(output, outputSize, g_initialized); goto functionEnd; }
-		try
-		{
-			g_dbDriver = get_driver_instance();;
-		}
-		catch (sql::SQLException e)
-		{
-			setLastError(std::string("Could not get a database driver. Error message: ").append(e.what()));
-			setBool(output, outputSize, g_initialized);
-			goto functionEnd;
-		}
-		g_initialized = true;
-		setBool(output, outputSize, g_initialized);
-	}
-#pragma endregion
-#pragma region Function INITIALIZED
-	else if (fnc.compare("INITIALIZED") == NULL)
-	{
-		setBool(output, outputSize, g_initialized);
-	}
-#pragma endregion
-#pragma region Function VERSION
-	else if (fnc.compare("VERSION") == NULL)
-	{
-		char version[] = "0.1.0 BETA";
-		if (strlen(version) >= outputSize)
-			goto functionEnd;
-		strcpy(output, version);
-	}
-#pragma endregion
-functionEnd:
-	g_connectionWatchMutex.unlock();
-	return;
-	*/
-}
 
 #ifndef _DEBUG
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReserved)

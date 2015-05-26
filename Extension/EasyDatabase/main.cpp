@@ -12,9 +12,6 @@ using namespace std;
 
 int main(int argc, char* args[])
 {
-	sqf::Array arr;
-	sqf::Array::parsePartially(&arr, "[\"test\"\"\", [1.2, .2, 1], false]");
-	/*
 	time_t t = time(NULL);
 	char output[8192];
 	cout << "====INITIALIZE DLL====" << endl;
@@ -82,6 +79,7 @@ int main(int argc, char* args[])
 	RVExtension(output, 8192, "1[2265,944]qwez"); cout << "Test 20 result:" << output << endl;
 	RVExtension(output, 8192, "1226]5944qw[ez,"); cout << "Test 21 result:" << output << endl;
 
+
 	cout << "====ERROR TESTS - INVALID USE====" << endl;
 	//Error Tests - Invalid use
 	RVExtension(output, 8192, std::string().append("[\"").append("QUERY").append("\",\"").append("SELECT * FROM `test`").append("\", 0]").c_str()); cout << output << endl;
@@ -91,6 +89,5 @@ int main(int argc, char* args[])
 	RVExtension(output, 8192, "[\"NEXT\",\"1\"]"); cout << output << endl;
 
 	system("pause");
-	*/
 }
 #endif

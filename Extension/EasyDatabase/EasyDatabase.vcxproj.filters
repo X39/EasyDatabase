@@ -78,6 +78,9 @@
     <ClInclude Include="sqf\String.h">
       <Filter>Header Files\sqfParser</Filter>
     </ClInclude>
+    <ClInclude Include="sqf\Command.h">
+      <Filter>Header Files\sqfParser</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Text Include="documentation.txt" />
