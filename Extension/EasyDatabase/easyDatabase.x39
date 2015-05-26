@@ -1,9 +1,13 @@
-Connections
+settings
+{
+	doToUpperForCommands = true;
+}
+connections
 {
 	Connection1(serverUri = "tcp://127.0.0.1:3306", database = "easyMySql1", username = "easyMySql" password = "somePassword");
 	Connection2(serverUri = "tcp://127.0.0.1:3306", database = "easyMySql2", username = "easyMySql" password = "somePassword");
 }
-PreparedStatements
+preparedStatements
 {
 	Statement1(statement = "SELECT * FROM table")
 	Statement2(statement = "INSERT INTO table VALUES ({{{arg1}}}, {{{arg2}}})");
