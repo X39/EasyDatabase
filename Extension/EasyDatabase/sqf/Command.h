@@ -11,6 +11,7 @@ namespace sqf
 		sqf::Array* _parameters;
 		std::string _help;
 		std::string _name;
+		bool _preventCompare;
 	public:
 		enum error
 		{
@@ -18,7 +19,7 @@ namespace sqf
 			LengthDiffers = 1,
 			TypeDiffers
 		};
-		Command(std::string name, std::function<std::string(sqf::Array*)> fnc, std::string example = "", std::string help = "") : _fnc(fnc), _help(help), _name(name)
+		Command(std::string name, std::function<std::string(sqf::Array*)> fnc, std::string example = "", std::string help = "", bool preventCompare) : _fnc(fnc), _help(help), _name(name), _preventCompare(preventCompare)
 		{
 			_parameters = new sqf::Array;
 			try
@@ -61,7 +62,7 @@ namespace sqf
 		}
 		std::string runCommand(sqf::Array* params, bool checkParams = true)
 		{
-			if (checkParams && compareParameters(params))
+			if (checkParams && !this->_preventCompare && compareParameters(params))
 				throw std::exception("Parameters dont match");
 			auto result = this->_fnc(params);
 			return result;
