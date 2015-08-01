@@ -76,12 +76,12 @@ static struct structConfig {
 		this->preparedStatements.clear();
 	}
 } g_config;
-static std::vector<sqf::Command>	g_commands;
+static std::vector<sqf::Command*>	g_commands;
 static int g_outputSize;
 
 void toUpper(std::string& s)
 {
-	for (int i = s.length - 1; i >= 0; i--)
+	for (int i = s.length() - 1; i >= 0; i--)
 		s[i] = toupper(s[i]);
 }
 void toUpper(char* s)
@@ -92,7 +92,7 @@ void toUpper(char* s)
 void addCommands(void)
 {
 	g_commands.push_back(
-		sqf::Command(
+		new sqf::Command(
 			"ABOUT",
 			[](sqf::Array* arr, char* output, int outputSize)
 			{
@@ -103,7 +103,7 @@ void addCommands(void)
 		)
 	);
 	g_commands.push_back(
-		sqf::Command(
+		new sqf::Command(
 			"VERSION",
 			[](sqf::Array* arr, char* output, int outputSize)
 			{
@@ -114,7 +114,7 @@ void addCommands(void)
 		)
 	);
 	g_commands.push_back(
-		sqf::Command(
+		new sqf::Command(
 			"GETPREPAREDSTATEMENT",
 			[](sqf::Array* arr, char* output, int outputSize)
 			{
@@ -130,7 +130,7 @@ void addCommands(void)
 		)
 	);
 	g_commands.push_back(
-		sqf::Command(
+		new sqf::Command(
 			"GETCONNECTION",
 			[](sqf::Array* arr, char* output, int outputSize)
 			{
@@ -146,7 +146,7 @@ void addCommands(void)
 		)
 	);
 	g_commands.push_back(
-		sqf::Command(
+		new sqf::Command(
 			"OPENCONNECTION",
 			[](sqf::Array* arr, char* output, int outputSize)
 			{
@@ -164,7 +164,7 @@ void addCommands(void)
 		)
 	);
 	g_commands.push_back(
-		sqf::Command(
+		new sqf::Command(
 			"CLOSECONNECTION",
 			[](sqf::Array* arr, char* output, int outputSize)
 			{
@@ -182,7 +182,7 @@ void addCommands(void)
 		)
 	);
 	g_commands.push_back(
-		sqf::Command(
+		new sqf::Command(
 			"CREATEOPERATIONSET",
 			[](sqf::Array* arr, char* output, int outputSize)
 			{
@@ -200,7 +200,7 @@ void addCommands(void)
 		)
 	);
 	g_commands.push_back(
-		sqf::Command(
+		new sqf::Command(
 			"CLOSEOPERATIONSET",
 			[](sqf::Array* arr, char* output, int outputSize)
 			{
@@ -218,7 +218,7 @@ void addCommands(void)
 		)
 	);
 	if (g_config.allowNonPreparedSql) g_commands.push_back(
-		sqf::Command(
+		new sqf::Command(
 			"EXECUTE",
 			[](sqf::Array* arr, char* output, int outputSize)
 			{
@@ -237,7 +237,7 @@ void addCommands(void)
 		)
 	);
 	g_commands.push_back(
-		sqf::Command(
+		new sqf::Command(
 			"EXECUTESTATEMENT",
 			[](sqf::Array* arr, char* output, int outputSize)
 			{
@@ -259,7 +259,7 @@ void addCommands(void)
 		)
 	);
 	if (g_config.allowNonPreparedSql) g_commands.push_back(
-		sqf::Command(
+		new sqf::Command(
 			"EXECUTEQUERY",
 			[](sqf::Array* arr, char* output, int outputSize)
 			{
@@ -278,7 +278,7 @@ void addCommands(void)
 		)
 	);
 	g_commands.push_back(
-		sqf::Command(
+		new sqf::Command(
 			"EXECUTEQUERYSTATEMENT",
 			[](sqf::Array* arr, char* output, int outputSize)
 			{
@@ -300,7 +300,7 @@ void addCommands(void)
 		)
 	);
 	if (g_config.allowNonPreparedSql) g_commands.push_back(
-		sqf::Command(
+		new sqf::Command(
 			"EXECUTEUPDATE",
 			[](sqf::Array* arr, char* output, int outputSize)
 			{
@@ -319,7 +319,7 @@ void addCommands(void)
 		)
 	);
 	g_commands.push_back(
-		sqf::Command(
+		new sqf::Command(
 			"EXECUTEUPDATESTATEMENT",
 			[](sqf::Array* arr, char* output, int outputSize)
 			{
@@ -341,7 +341,7 @@ void addCommands(void)
 		)
 	);
 	g_commands.push_back(
-		sqf::Command(
+		new sqf::Command(
 			"NEXT",
 			[](sqf::Array* arr, char* output, int outputSize)
 			{
@@ -361,7 +361,7 @@ void addCommands(void)
 		)
 	);
 	g_commands.push_back(
-		sqf::Command(
+		new sqf::Command(
 			"CLEAR",
 			[](sqf::Array* arr, char* output, int outputSize)
 			{
@@ -647,7 +647,7 @@ void __stdcall RVExtension(char *output, int outputSize, const char *function)
 	try
 	{
 		for (auto& it : g_commands)
-			if (flag = it.runIfMatch(fnc, cmdOut, &arg, output, outputSize, g_config.doCheckParams))
+			if (flag = it->runIfMatch(fnc, cmdOut, &arg, output, outputSize, g_config.doCheckParams))
 			{
 				strncpy(output, cmdOut.c_str(), outputSize);
 				break;
@@ -675,6 +675,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReser
 	case DLL_THREAD_ATTACH:
 	case DLL_THREAD_DETACH:
 	case DLL_PROCESS_DETACH:
+		for (auto& it : g_commands)
+			delete it;
 		g_commands.clear();
 		break;
 	}
