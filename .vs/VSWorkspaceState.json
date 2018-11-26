@@ -1,0 +1,11 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\Extension",
+    "\\Extension\\EasyDatabase",
+    "\\Extension\\EasyDatabase\\inc",
+    "\\Extension\\EasyDatabase\\src"
+  ],
+  "SelectedNode": "\\Extension\\EasyDatabase\\src\\dllmain.cpp",
+  "PreviewInSolutionExplorer": false
+}
